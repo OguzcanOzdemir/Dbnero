@@ -367,6 +367,28 @@ class BackupService:
             )
         return create_adapter(profile, None, self.settings.tool_paths)
 
+    # -- metadata ------------------------------------------------------------
+
+    def update_metadata(
+        self,
+        backup_id: str,
+        description: str,
+        tags: Sequence[str],
+        reference_date: datetime | None = None,
+    ) -> BackupRecord:
+        """Change user metadata (never the creation time) in catalog and manifest."""
+        self.catalog.update_backup(
+            backup_id,
+            description=description.strip(),
+            tags=list(dict.fromkeys(t.strip() for t in tags if t.strip())),
+            reference_date=reference_date,
+        )
+        record = self.catalog.get_backup(backup_id)
+        manifest = manifest_path(record)
+        if manifest.exists():
+            write_manifest(record, manifest)
+        return record
+
     # -- deletion & retention -----------------------------------------------
 
     def delete_backup(self, backup_id: str, delete_files: bool = True) -> None:
@@ -414,13 +436,18 @@ class BackupService:
         return None
 
 
-def backup_files(record: BackupRecord) -> list[Path]:
+def manifest_path(record: BackupRecord) -> Path:
     from dbnero.storage.archive import MANIFEST_SUFFIX
 
     base = record.file_path
     marker = f"_{record.short_id}"
     stem = base.name[: base.name.rfind(marker) + len(marker)] if marker in base.name else base.stem
-    files = [base, base.with_name(base.name + ".partial"), base.parent / f"{stem}{MANIFEST_SUFFIX}"]
+    return base.parent / f"{stem}{MANIFEST_SUFFIX}"
+
+
+def backup_files(record: BackupRecord) -> list[Path]:
+    base = record.file_path
+    files = [base, base.with_name(base.name + ".partial"), manifest_path(record)]
     if record.schema_snapshot_path:
         files.append(record.schema_snapshot_path)
     if record.comparison_snapshot_path:
@@ -447,4 +474,5 @@ __all__ = [
     "BatchResult",
     "InsufficientDiskSpace",
     "backup_files",
+    "manifest_path",
 ]

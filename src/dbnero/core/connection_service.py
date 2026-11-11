@@ -137,6 +137,10 @@ class ConnectionService:
     def list_databases(self, connection_id: str, include_system: bool = False) -> list[str]:
         return self.adapter_for(connection_id).list_databases(include_system)
 
+    def credential_store_available(self) -> bool:
+        check = getattr(self.credentials, "is_available", None)
+        return bool(check()) if callable(check) else True
+
     # -- tooling ----------------------------------------------------------
 
     def check_tools(self, engine: Engine) -> EngineToolReport:

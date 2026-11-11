@@ -142,3 +142,15 @@ def test_backup_defaults_from_settings(world, monkeypatch):
     world.app.settings.backup_defaults = {"postgresql": {"compress_level": 9}}
     world.app.backups.backup_database(BackupRequest(world.pg.id, "crm", options={"x": 1}))
     assert seen == {"compress_level": 9, "x": 1}
+
+
+def test_update_metadata_rewrites_manifest(world):
+    from dbnero.core.backup_service import manifest_path
+
+    svc = world.app.backups
+    rec = svc.backup_database(BackupRequest(world.pg.id, "crm", "old"))
+    updated = svc.update_metadata(rec.backup_id, " new ", ["a", "a", "b"])
+    assert updated.description == "new" and updated.tags == ["a", "b"]
+    assert updated.created_at_utc == rec.created_at_utc
+    data = json.loads(manifest_path(rec).read_text())
+    assert data["description"] == "new" and data["tags"] == ["a", "b"]
