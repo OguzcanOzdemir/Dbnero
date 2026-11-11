@@ -1,7 +1,8 @@
 name: Website
 
 # Publishes site/ (the download page) to GitHub Pages.
-# One-time setup: Settings → Pages → Build and deployment → Source: GitHub Actions.
+# One-time setup (needs a repository admin): Settings → Pages → Build and
+# deployment → Source: GitHub Actions. Then re-run this workflow.
 on:
   push:
     paths:
@@ -31,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
         with:
-          enablement: true
+          enablement: false
       - name: Assemble site
         run: |
           mkdir -p site/screenshots
