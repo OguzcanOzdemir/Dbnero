@@ -43,6 +43,7 @@ class AppContext:
         backups = BackupService(catalog, connections, settings)
         jobs = JobManager(catalog, max_workers=max(2, settings.max_parallel_jobs))
         jobs.recover_interrupted()
+        catalog.mark_interrupted_backups()
         return cls(
             settings=settings,
             catalog=catalog,

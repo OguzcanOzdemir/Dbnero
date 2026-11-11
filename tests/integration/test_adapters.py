@@ -130,3 +130,25 @@ def test_mssql_sql_transfer_mode(seeded, scratch_db_name, tmp_path: Path):
         adapter.restore(
             dest, scratch_db_name, {**restore_opts, "checksum_sha256": "0" * 64, "overwrite": True}
         )
+
+
+def test_overwrite_restore_of_default_database(seeded, tmp_path: Path):
+    """Replacing the database the profile connects to by default must work:
+    admin statements may not run inside the database being dropped."""
+    from dataclasses import replace
+
+    from dbnero.adapters.base import create_adapter
+
+    target, db = seeded
+    adapter = target.adapter()
+    ext, _ = adapter.backup_format({})
+    dest = tmp_path / f"b.{ext}"
+    result = adapter.backup(db, dest, {})
+    bound = create_adapter(replace(target.profile, default_database=db), target.password)
+    bound.restore(
+        dest,
+        db,
+        {"overwrite": True, "server_file_path": result.extra.get("server_file_path")},
+    )
+    assert db in adapter.list_databases()
+    assert adapter.count_rows(db, _schema(target), "orders") == 1000

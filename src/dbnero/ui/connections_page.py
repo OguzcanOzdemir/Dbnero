@@ -388,10 +388,7 @@ class ConnectionsPage(Page):
         self._set_busy(True, "Listing databases…")
 
         def work() -> tuple[list[str], list[str]]:
-            adapter = self.app.connections.adapter_for(profile, password)
-            user_dbs = adapter.list_databases(False)
-            all_dbs = adapter.list_databases(True) if include_system else user_dbs
-            return user_dbs, all_dbs
+            return self.app.connections.discover(profile, password, include_system)
 
         def ok(result: tuple[list[str], list[str]]) -> None:
             user_dbs, all_dbs = result

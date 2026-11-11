@@ -91,3 +91,16 @@ def test_overview_stats(tmp_path, catalog):
     assert len(stats.stale_partials) == 1 and 0 <= stats.disk_used_percent <= 100
     assert svc.cleanup_stale_partials(tmp_path / "arch") == 1
     assert svc.overview(tmp_path / "missing" / "dir").total_backups == 1
+
+
+def test_import_batch_backups_recreates_batch(tmp_path, catalog):
+    """Batch backups reference the batches table; importing must recreate it."""
+    from dbnero.core.catalog_service import CatalogService
+
+    rec, paths = _record(tmp_path / "arch")
+    rec.batch_id = "batch-1"
+    rec.backup_mode = m.BackupMode.BATCH
+    write_manifest(rec, paths.manifest)
+    report = CatalogService(catalog).import_from_archive(tmp_path / "arch")
+    assert report.imported == 1 and report.invalid == []
+    assert catalog.get_backup(rec.backup_id).batch_id == "batch-1"

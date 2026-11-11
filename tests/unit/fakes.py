@@ -104,7 +104,7 @@ class FakeAdapter:
         self.server.restores.append(target_database)
         return RestoreResult(target_database)
 
-    def validate_backup(self, source: Path) -> ValidationResult:
+    def validate_backup(self, source: Path, ctx: JobContext | None = None) -> ValidationResult:
         ok = source.is_file() and source.read_text("utf-8").startswith(MAGIC)
         return ValidationResult(ok, ["fake ok"] if ok else [], [] if ok else ["bad fake dump"])
 

@@ -87,7 +87,9 @@ class MySQLAdapter:
     # -- connection helpers ---------------------------------------------
 
     @contextmanager
-    def _connect(self, database: str | None = None, buffered: bool = True) -> Iterator[Any]:
+    def _connect(self, database: str | None = None, admin: bool = False) -> Iterator[Any]:
+        """Open a connection. ``admin`` connections select no database, so they
+        keep working while the profile's default database is dropped/recreated."""
         import mysql.connector
 
         kwargs: dict[str, Any] = {
@@ -99,8 +101,10 @@ class MySQLAdapter:
             "charset": "utf8mb4",
             "autocommit": True,
         }
-        if database or self.profile.default_database:
-            kwargs["database"] = database or self.profile.default_database
+        if database:
+            kwargs["database"] = database
+        elif self.profile.default_database and not admin:
+            kwargs["database"] = self.profile.default_database
         if self.profile.ssl_mode is SslMode.DISABLE:
             kwargs["ssl_disabled"] = True
         elif self.profile.ssl_mode is SslMode.VERIFY_FULL:
@@ -116,13 +120,23 @@ class MySQLAdapter:
             conn.close()
 
     def _query(
-        self, sql: str, params: Sequence[Any] = (), database: str | None = None
+        self,
+        sql: str,
+        params: Sequence[Any] = (),
+        database: str | None = None,
+        admin: bool = False,
     ) -> list[Any]:
-        with self._connect(database) as conn:
+        import mysql.connector
+
+        with self._connect(database, admin=admin) as conn:
             cur = conn.cursor()
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall()
-            cur.close()
+            try:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall() if cur.with_rows else []
+            except mysql.connector.Error as exc:
+                raise AdapterError(str(getattr(exc, "msg", exc))) from None
+            finally:
+                cur.close()
         return list(rows)
 
     def _tool(self, name: str) -> Path:
@@ -168,7 +182,7 @@ class MySQLAdapter:
         return str(rows[0][0]) if rows else ""
 
     def list_databases(self, include_system: bool = False) -> list[str]:
-        names = [str(r[0]) for r in self._query("SHOW DATABASES")]
+        names = [str(r[0]) for r in self._query("SHOW DATABASES", admin=True)]
         if not include_system:
             names = [n for n in names if n not in SYSTEM_DATABASES]
         return sorted(names)
@@ -178,11 +192,13 @@ class MySQLAdapter:
         self._query(
             f"CREATE DATABASE {_quote(name)} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
             if self._supports_0900()
-            else f"CREATE DATABASE {_quote(name)} CHARACTER SET utf8mb4"
+            else f"CREATE DATABASE {_quote(name)} CHARACTER SET utf8mb4",
+            admin=True,
         )
 
     def _supports_0900(self) -> bool:
-        version = self.test_connection()
+        rows = self._query("SELECT VERSION()", admin=True)
+        version = str(rows[0][0]) if rows else ""
         m = re.match(r"(\d+)", version)
         return bool(m and int(m.group(1)) >= 8 and "MariaDB" not in version)
 
@@ -197,7 +213,7 @@ class MySQLAdapter:
     def drop_database(self, name: str) -> None:
         if name in SYSTEM_DATABASES:
             raise AdapterError(f"Refusing to drop system database {name!r}")
-        self._query(f"DROP DATABASE IF EXISTS {_quote(name)}")
+        self._query(f"DROP DATABASE IF EXISTS {_quote(name)}", admin=True)
 
     def backup(
         self,
@@ -314,7 +330,7 @@ class MySQLAdapter:
             )
         return RestoreResult(target_database=target_database)
 
-    def validate_backup(self, source: Path) -> ValidationResult:
+    def validate_backup(self, source: Path, ctx: JobContext | None = None) -> ValidationResult:
         checks: list[str] = []
         if not source.is_file():
             return ValidationResult(False, [], [f"File not found: {source}"])
@@ -323,6 +339,8 @@ class MySQLAdapter:
             if _is_gzip(source):
                 with gzip.open(source, "rb") as gz:
                     while chunk := gz.read(_CHUNK):
+                        if ctx is not None:
+                            ctx.raise_if_cancelled()
                         tail = (tail + chunk)[-_TAIL_BYTES:]
                 checks.append("gzip stream intact")
             else:

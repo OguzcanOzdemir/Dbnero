@@ -185,6 +185,30 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 
 ---
 
+## v0.1.0 — Yayın, arayüz yenilemesi ve kod incelemesi
+
+- [x] Uygulama tamamen İngilizce (arayüz ve servis mesajları)
+- [x] Yeni tasarım sistemi: açık/koyu tema token'ları, ikonlu kenar çubuğu, kartlar, durum rozetleri, gizlenebilir gelişmiş ayarlar
+- [x] Uygulama ikonu (SVG, .ico, .icns, .png)
+- [x] Windows kurulum dosyası (Inno Setup) + taşınabilir .zip, macOS .dmg (Apple Silicon), Linux AppImage + .tar.gz
+- [x] `v*` etiketiyle otomatik GitHub Release ve `SHA256SUMS.txt`
+- [x] GitHub Pages indirme sitesi (`site/`), işletim sistemine göre önerilen indirme
+- [x] İngilizce README ve indirme bağlantıları
+- [x] Tam kod incelemesi (10 bulgu) ve düzeltmeleri:
+  - [x] Manifest'ten içe aktarmada toplu iş kaydı yeniden oluşturuluyor
+  - [x] MySQL / SQL Server / PostgreSQL: varsayılan veritabanının üzerine geri yükleme güvenli
+  - [x] SQL Server: silme başarısızsa veritabanı tek kullanıcı modunda kalmıyor
+  - [x] Saklama politikası başarısız kayıtları yer tutucu saymıyor, son kullanılabilir yedeği koruyor
+  - [x] Yarıda kalan yedek kayıtları açılışta "failed" olarak işaretleniyor
+  - [x] PostgreSQL 12 ve öncesinde `DROP DATABASE` destekleniyor
+  - [x] Doğrulama iptal edilebilir
+  - [x] Türkçe karakterli arama (Unicode büyük/küçük harf)
+  - [x] SQL Server SQL aktarımı dosyayı bir kez okuyor
+  - [x] Arayüz veritabanı keşfini servis üzerinden yapıyor
+- [ ] GitHub Pages'in depo ayarlarından bir kez etkinleştirilmesi (Settings → Pages → Source: GitHub Actions)
+- [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
+- [ ] macOS Intel derlemesi
+
 ## Gelecek fikirleri (kapsam dışı)
 
 - Zamanlanmış yedekleme ve saklama kuralları

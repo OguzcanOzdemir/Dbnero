@@ -312,7 +312,7 @@ class ArchivePage(Page):
 
         def work(h: JobHandle) -> object:
             h.log(f"Verifying {rec.file_path.name}")
-            result = self.app.backups.validate(rec.backup_id)
+            result = self.app.backups.validate(rec.backup_id, ctx=h.ctx)
             for c in result.checks:
                 h.log(c)
             for e in result.errors:
@@ -389,7 +389,11 @@ class ArchivePage(Page):
         path = QFileDialog.getExistingDirectory(self, "Folder with dbnero backups", start)
         if not path:
             return
-        report = self.app.catalog_service.import_from_archive(Path(path))
+        try:
+            report = self.app.catalog_service.import_from_archive(Path(path))
+        except Exception as exc:
+            show_error(self, "Import failed", exc)
+            return
         QMessageBox.information(
             self,
             "Import",

@@ -178,7 +178,10 @@ class BackupService:
             for warning in result.warnings:
                 emit("WARNING", f"{request.database}: {warning}")
 
-            validation = adapter.validate_backup(paths.backup)
+            try:
+                validation = adapter.validate_backup(paths.backup, ctx)
+            except OperationCancelled:
+                validation = ValidationResult(False, [], ["Verification was cancelled"])
             status = BackupStatus.SUCCEEDED if validation.ok else BackupStatus.UNVERIFIED
             if not validation.ok:
                 emit(
@@ -317,7 +320,9 @@ class BackupService:
 
     # -- validation -------------------------------------------------------
 
-    def validate(self, backup_id: str, update_status: bool = True) -> ValidationResult:
+    def validate(
+        self, backup_id: str, update_status: bool = True, ctx: JobContext | None = None
+    ) -> ValidationResult:
         record = self.catalog.get_backup(backup_id)
         checks: list[str] = []
         errors: list[str] = []
@@ -340,7 +345,7 @@ class BackupService:
                 errors.append("No SHA-256 recorded for this backup")
             if not errors:
                 adapter = self._offline_adapter(record)
-                deep = adapter.validate_backup(path)
+                deep = adapter.validate_backup(path, ctx)
                 checks.extend(deep.checks)
                 errors.extend(deep.errors)
 
@@ -400,29 +405,46 @@ class BackupService:
         self.catalog.delete_backup(backup_id)
 
     def retention_plan(self, now: datetime | None = None) -> list[BackupRecord]:
-        """Backups that the retention policy would delete (never the newest
-        successful backup of a database)."""
+        """Backups the retention policy would delete.
+
+        * "keep last N" counts only usable backups (succeeded or unverified);
+          failed and cancelled entries never take a slot.
+        * the newest usable backup of every database is always kept, preferring
+          a succeeded one, so a database never loses its last restorable copy.
+        * failed / cancelled entries are removed only by the age rule.
+        """
         keep_last = self.settings.retention_keep_last
         max_age = self.settings.retention_max_age_days
         if keep_last <= 0 and max_age <= 0:
             return []
         now = now or utc_now()
         cutoff = now - timedelta(days=max_age) if max_age > 0 else None
+        usable_states = {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}
         groups: dict[tuple[str, str], list[BackupRecord]] = {}
         for rec in self.catalog.list_backups(BackupFilter()):
             groups.setdefault((rec.server_label, rec.database_name), []).append(rec)
         doomed: list[BackupRecord] = []
         for recs in groups.values():
             recs.sort(key=lambda r: r.created_at_utc, reverse=True)
-            good = [r for r in recs if r.status is BackupStatus.SUCCEEDED]
-            protected = {good[0].backup_id} if good else set()
-            for idx, rec in enumerate(recs):
-                if rec.backup_id in protected or rec.status is BackupStatus.RUNNING:
+            usable = [r for r in recs if r.status in usable_states]
+            succeeded = [r for r in usable if r.status is BackupStatus.SUCCEEDED]
+            keeper = succeeded[0] if succeeded else (usable[0] if usable else None)
+            for idx, rec in enumerate(usable):
+                if keeper is not None and rec.backup_id == keeper.backup_id:
                     continue
                 too_many = keep_last > 0 and idx >= keep_last
                 too_old = cutoff is not None and rec.created_at_utc < cutoff
                 if too_many or too_old:
                     doomed.append(rec)
+            for rec in recs:
+                if rec.status in usable_states or rec.status in {
+                    BackupStatus.RUNNING,
+                    BackupStatus.PENDING,
+                }:
+                    continue
+                if cutoff is not None and rec.created_at_utc < cutoff:
+                    doomed.append(rec)
+        doomed.sort(key=lambda r: r.created_at_utc)
         return doomed
 
     def apply_retention(self, backup_ids: Sequence[str]) -> int:

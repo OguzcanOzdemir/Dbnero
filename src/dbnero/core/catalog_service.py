@@ -90,8 +90,22 @@ class CatalogService:
             try:
                 self.catalog.get_backup(record.backup_id)
             except NotFound:
-                self.catalog.add_backup(record)
-                report.imported += 1
+                pass
             else:
                 report.skipped_existing += 1
+                continue
+            try:
+                if record.batch_id:
+                    self.catalog.ensure_batch(
+                        record.batch_id,
+                        record.connection_id,
+                        record.created_at_utc,
+                        record.database_name,
+                    )
+                self.catalog.add_backup(record)
+            except Exception as exc:
+                log.warning("Could not import %s: %s", manifest, exc)
+                report.invalid.append(str(manifest))
+            else:
+                report.imported += 1
         return report

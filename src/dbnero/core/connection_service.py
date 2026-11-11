@@ -137,6 +137,15 @@ class ConnectionService:
     def list_databases(self, connection_id: str, include_system: bool = False) -> list[str]:
         return self.adapter_for(connection_id).list_databases(include_system)
 
+    def discover(
+        self, profile: ConnectionProfile, password: str | None = None, include_system: bool = False
+    ) -> tuple[list[str], list[str]]:
+        """Databases of a (possibly unsaved) profile: (user databases, all listed)."""
+        self.validate(profile)
+        adapter = self.adapter_for(profile, password)
+        user_dbs = adapter.list_databases(False)
+        return user_dbs, adapter.list_databases(True) if include_system else user_dbs
+
     def credential_store_available(self) -> bool:
         check = getattr(self.credentials, "is_available", None)
         return bool(check()) if callable(check) else True

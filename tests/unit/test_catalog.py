@@ -208,3 +208,22 @@ def test_refuses_newer_catalog(tmp_path):
     eng.dispose()
     with pytest.raises(CatalogTooNew):
         Catalog(path)
+
+
+def test_unicode_case_insensitive_search(catalog):
+    rec = _backup(db="ÜRÜNLER", description="Şube yedeği")
+    catalog.add_backup(rec)
+    for term in ("ürün", "ÜRÜN", "şube", "ŞUBE"):
+        assert [r.backup_id for r in catalog.list_backups(BackupFilter(text=term))] == [
+            rec.backup_id
+        ], term
+
+
+def test_mark_interrupted_backups(catalog):
+    running = _backup(status=m.BackupStatus.RUNNING)
+    done = _backup(db="other", status=m.BackupStatus.SUCCEEDED)
+    catalog.add_backup(running)
+    catalog.add_backup(done)
+    assert catalog.mark_interrupted_backups() == 1
+    assert catalog.get_backup(running.backup_id).status is m.BackupStatus.FAILED
+    assert catalog.get_backup(done.backup_id).status is m.BackupStatus.SUCCEEDED

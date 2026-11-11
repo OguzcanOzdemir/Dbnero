@@ -13,6 +13,7 @@ from dbnero.adapters.base import (
     AdapterError,
     ConnectionFailed,
     JobContext,
+    OperationCancelled,
     ToolNotFound,
     register_adapter,
 )
@@ -66,6 +67,11 @@ class PostgreSQLAdapter:
 
     def _maintenance_db(self) -> str:
         return self.profile.default_database or "postgres"
+
+    def _admin_db(self, target: str) -> str:
+        """Database to connect to while creating or dropping ``target``."""
+        db = self._maintenance_db()
+        return "postgres" if db == target else db
 
     @contextmanager
     def _connect(self, database: str | None = None) -> Iterator[psycopg.Connection[Any]]:
@@ -137,8 +143,13 @@ class PostgreSQLAdapter:
         return [n for n in names if n not in SYSTEM_DATABASES]
 
     def create_database(self, name: str) -> None:
-        with self._connect() as conn:
-            conn.execute(f"CREATE DATABASE {_quote(name)}")
+        import psycopg
+
+        with self._connect(self._admin_db(name)) as conn:
+            try:
+                conn.execute(f"CREATE DATABASE {_quote(name)}")
+            except psycopg.Error as exc:
+                raise AdapterError(_pg_error(exc)) from None
 
     def database_size_bytes(self, database: str) -> int | None:
         with self._connect() as conn:
@@ -146,10 +157,25 @@ class PostgreSQLAdapter:
         return int(row[0]) if row and row[0] is not None else None
 
     def drop_database(self, name: str) -> None:
-        if name in SYSTEM_DATABASES or name == self._maintenance_db():
+        import psycopg
+
+        if name in SYSTEM_DATABASES or name == "postgres":
             raise AdapterError(f"Refusing to drop database {name!r}")
-        with self._connect() as conn:
-            conn.execute(f"DROP DATABASE IF EXISTS {_quote(name)} WITH (FORCE)")
+        with self._connect(self._admin_db(name)) as conn:
+            try:
+                version = int(conn.execute("SHOW server_version_num").fetchone()[0])  # type: ignore[index]
+                if version >= 130000:
+                    conn.execute(f"DROP DATABASE IF EXISTS {_quote(name)} WITH (FORCE)")
+                else:
+                    # PostgreSQL 12 and older: end other sessions first.
+                    conn.execute(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = %s AND pid <> pg_backend_pid()",
+                        (name,),
+                    )
+                    conn.execute(f"DROP DATABASE IF EXISTS {_quote(name)}")
+            except psycopg.Error as exc:
+                raise AdapterError(_pg_error(exc)) from None
 
     def backup(
         self,
@@ -232,7 +258,7 @@ class PostgreSQLAdapter:
             raise AdapterError(f"pg_restore failed: {exc}") from exc
         return RestoreResult(target_database=target_database)
 
-    def validate_backup(self, source: Path) -> ValidationResult:
+    def validate_backup(self, source: Path, ctx: JobContext | None = None) -> ValidationResult:
         checks: list[str] = []
         errors: list[str] = []
         if not source.is_file():
@@ -252,7 +278,9 @@ class PostgreSQLAdapter:
 
         out: list[bytes] = []
         try:
-            run_tool([pg_restore, "--list", source], stdout_sink=out.append, timeout=600)
+            run_tool([pg_restore, "--list", source], stdout_sink=out.append, timeout=600, ctx=ctx)
+        except OperationCancelled:
+            raise
         except AdapterError as exc:
             errors.append(f"pg_restore --list failed: {exc}")
             return ValidationResult(False, checks, errors)
@@ -268,8 +296,10 @@ class PostgreSQLAdapter:
         try:
             run_tool(
                 [pg_restore, f"--file={os.devnull}", source],
-                timeout=3600,
+                ctx=ctx,
             )
+        except OperationCancelled:
+            raise
         except AdapterError as exc:
             errors.append(f"Archive data is unreadable: {exc}")
             return ValidationResult(False, checks, errors)

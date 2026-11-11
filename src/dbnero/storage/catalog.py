@@ -218,6 +218,8 @@ def _make_engine(path: Path | str) -> Engine:
         dbapi_conn.isolation_level = None
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA foreign_keys = ON")
+        # SQLite's lower() only folds ASCII; use Python's Unicode case folding.
+        dbapi_conn.create_function("ufold", 1, _casefold, deterministic=True)
         cur.close()
 
     @event.listens_for(engine, "begin")
@@ -296,6 +298,48 @@ class Catalog:
 
     # -- batches ----------------------------------------------------------
 
+    def ensure_batch(
+        self, batch_id: str, connection_id: str, created_at_utc: datetime, database_name: str
+    ) -> None:
+        """Create a batch row if missing (used when importing manifests)."""
+        with self._tx() as conn:
+            row = conn.execute(
+                select(batches_t.c.database_names).where(batches_t.c.batch_id == batch_id)
+            ).first()
+            if row is None:
+                conn.execute(
+                    insert(batches_t).values(
+                        batch_id=batch_id,
+                        connection_id=connection_id,
+                        description="",
+                        database_names=[database_name],
+                        created_at_utc=created_at_utc,
+                    )
+                )
+            elif database_name not in (row.database_names or []):
+                conn.execute(
+                    update(batches_t)
+                    .where(batches_t.c.batch_id == batch_id)
+                    .values(database_names=[*(row.database_names or []), database_name])
+                )
+
+    def mark_interrupted_backups(self) -> int:
+        """Backups left RUNNING/PENDING by a previous session become FAILED."""
+        with self._tx() as conn:
+            result = conn.execute(
+                update(backups_t)
+                .where(
+                    backups_t.c.status.in_(
+                        [m.BackupStatus.RUNNING.value, m.BackupStatus.PENDING.value]
+                    )
+                )
+                .values(
+                    status=m.BackupStatus.FAILED.value,
+                    error_message="Interrupted when the application closed",
+                )
+            )
+        return int(result.rowcount or 0)
+
     def add_batch(self, batch: m.BackupBatch) -> None:
         with self._tx() as conn:
             conn.execute(
@@ -352,10 +396,10 @@ class Catalog:
         if flt.created_to:
             conds.append(c.created_at_utc < flt.created_to)
         if flt.text:
-            pattern = "%" + _escape_like(flt.text.lower()) + "%"
+            pattern = "%" + _escape_like(flt.text.casefold()) + "%"
             conds.append(
-                func.lower(c.database_name).like(pattern, escape="\\")
-                | func.lower(c.description).like(pattern, escape="\\")
+                func.ufold(c.database_name).like(pattern, escape="\\")
+                | func.ufold(c.description).like(pattern, escape="\\")
             )
         if flt.tag:
             tags = func.json_each(c.tags).table_valued("value")
@@ -445,6 +489,10 @@ class Catalog:
 
 
 # -- row mapping ----------------------------------------------------------
+
+
+def _casefold(value: str | None) -> str | None:
+    return value.casefold() if isinstance(value, str) else value
 
 
 def _escape_like(value: str) -> str:

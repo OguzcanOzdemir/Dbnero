@@ -154,3 +154,42 @@ def test_update_metadata_rewrites_manifest(world):
     assert updated.created_at_utc == rec.created_at_utc
     data = json.loads(manifest_path(rec).read_text("utf-8"))
     assert data["description"] == "new" and data["tags"] == ["a", "b"]
+
+
+def test_retention_ignores_failed_entries_for_keep_last(world):
+    svc = world.app.backups
+    for _ in range(2):
+        svc.backup_database(BackupRequest(world.pg.id, "crm"))
+    world.servers["pg1"].fail_backup.add("crm")
+    for _ in range(3):
+        with pytest.raises(AdapterError):
+            svc.backup_database(BackupRequest(world.pg.id, "crm"))
+    world.app.settings.retention_keep_last = 2
+    # Three newer failures must not push the two good backups out.
+    assert svc.retention_plan() == []
+
+
+def test_retention_keeps_last_unverified_copy(world):
+    svc = world.app.backups
+    recs = [svc.backup_database(BackupRequest(world.pg.id, "crm")) for _ in range(2)]
+    for r in recs:
+        world.app.catalog.update_backup(r.backup_id, status=BackupStatus.UNVERIFIED)
+    world.app.settings.retention_max_age_days = 1
+    future = recs[-1].created_at_utc + timedelta(days=30)
+    plan = {r.backup_id for r in svc.retention_plan(now=future)}
+    assert plan == {recs[0].backup_id}
+
+
+def test_failed_entries_removed_by_age_only(world):
+    svc = world.app.backups
+    ok = svc.backup_database(BackupRequest(world.pg.id, "crm"))
+    world.servers["pg1"].fail_backup.add("crm")
+    with pytest.raises(AdapterError):
+        svc.backup_database(BackupRequest(world.pg.id, "crm"))
+    failed = next(r for r in world.app.catalog.list_backups() if r.status is BackupStatus.FAILED)
+    world.app.settings.retention_keep_last = 1
+    assert svc.retention_plan() == []
+    world.app.settings.retention_max_age_days = 1
+    future = failed.created_at_utc + timedelta(days=5)
+    assert [r.backup_id for r in svc.retention_plan(now=future)] == [failed.backup_id]
+    assert ok.status is BackupStatus.SUCCEEDED

@@ -18,6 +18,7 @@ Profile ``options`` keys: ``odbc_driver``, ``trust_server_certificate``
 
 from __future__ import annotations
 
+import contextlib
 import re
 import shutil
 import threading
@@ -55,6 +56,9 @@ from dbnero.core.models import (
 )
 
 SYSTEM_DATABASES = frozenset({"master", "model", "msdb", "tempdb"})
+# Administrative statements run in master so they never hold a lock on (or
+# depend on the existence of) the database being dropped or restored.
+MASTER = "master"
 FORMAT_LABEL = "mssql_bak"
 SQL_TRANSFER_CHUNK = 32 * 1024 * 1024
 _PERCENT_RE = re.compile(r"(\d+)\s+percent processed")
@@ -247,7 +251,7 @@ class MSSQLAdapter:
         return str(version or "")
 
     def list_databases(self, include_system: bool = False) -> list[str]:
-        with self._connect() as conn:
+        with self._connect(MASTER) as conn:
             rows = (
                 conn.cursor()
                 .execute("SELECT name FROM sys.databases WHERE state_desc = 'ONLINE' ORDER BY name")
@@ -259,12 +263,12 @@ class MSSQLAdapter:
         return [n for n in names if n not in SYSTEM_DATABASES]
 
     def _all_database_names(self) -> list[str]:
-        with self._connect() as conn:
+        with self._connect(MASTER) as conn:
             rows = conn.cursor().execute("SELECT name FROM sys.databases").fetchall()
         return [str(r[0]) for r in rows]
 
     def create_database(self, name: str) -> None:
-        with self._connect() as conn:
+        with self._connect(MASTER) as conn:
             conn.cursor().execute(f"CREATE DATABASE {_quote(name)}")
 
     def database_size_bytes(self, database: str) -> int | None:
@@ -280,10 +284,23 @@ class MSSQLAdapter:
             raise AdapterError(f"Refusing to drop system database {name!r}")
         if name not in self._all_database_names():
             return
-        with self._connect() as conn:
+        import pyodbc
+
+        with self._connect(MASTER) as conn:
             cur = conn.cursor()
-            cur.execute(f"ALTER DATABASE {_quote(name)} SET SINGLE_USER WITH ROLLBACK IMMEDIATE")
-            cur.execute(f"DROP DATABASE {_quote(name)}")
+            try:
+                cur.execute(
+                    f"ALTER DATABASE {_quote(name)} SET SINGLE_USER WITH ROLLBACK IMMEDIATE"
+                )
+            except pyodbc.Error as exc:
+                raise AdapterError(_odbc_error(exc)) from None
+            try:
+                cur.execute(f"DROP DATABASE {_quote(name)}")
+            except pyodbc.Error as exc:
+                # Never leave a database locked in single-user mode.
+                with contextlib.suppress(pyodbc.Error):
+                    cur.execute(f"ALTER DATABASE {_quote(name)} SET MULTI_USER")
+                raise AdapterError(_odbc_error(exc)) from None
 
     def backup(
         self,
@@ -307,7 +324,7 @@ class MSSQLAdapter:
             sql += ", COMPRESSION"
         if ctx:
             ctx.progress(0.0, f"BACKUP DATABASE {database}")
-        self._run_with_messages(sql, ctx, "Backup")
+        self._run_with_messages(sql, ctx, "Backup", MASTER)
 
         if ctx:
             ctx.progress(None, "RESTORE VERIFYONLY")
@@ -315,6 +332,7 @@ class MSSQLAdapter:
             f"RESTORE VERIFYONLY FROM DISK = {_literal(server_path)} WITH CHECKSUM",
             ctx,
             "Verify",
+            MASTER,
         )
 
         warnings: list[str] = []
@@ -364,34 +382,47 @@ class MSSQLAdapter:
     def _download_via_sql(
         self, server_path: str, destination: Path, ctx: JobContext | None
     ) -> None:
+        """Copy a server-side file through T-SQL.
+
+        The file is read once into a temporary table (tempdb) and then fetched
+        in chunks; chunking straight from OPENROWSET would re-read the whole
+        file for every chunk.
+        """
+        import pyodbc
+
         source = f"OPENROWSET(BULK {_literal(server_path)}, SINGLE_BLOB) AS f"
-        with self._connect() as conn:
+        with self._connect(MASTER) as conn:
             cur = conn.cursor()
             try:
-                total = int(
-                    cur.execute(f"SELECT DATALENGTH(BulkColumn) FROM {source}").fetchone()[0]
-                )
-            except Exception as exc:
+                if ctx:
+                    ctx.progress(None, "Reading backup on the server")
+                cur.execute(f"SELECT BulkColumn AS data INTO #dbnero_blob FROM {source}")
+                total = int(cur.execute("SELECT DATALENGTH(data) FROM #dbnero_blob").fetchone()[0])
+            except pyodbc.Error as exc:
                 raise AdapterError(
                     "Could not read the backup through OPENROWSET (needs ADMINISTER BULK "
-                    f"OPERATIONS). Configure a shared backup directory instead. {_odbc_error(exc)}"
+                    f"OPERATIONS). Configure a shared backup folder instead. {_odbc_error(exc)}"
                 ) from None
             offset = 1
-            with destination.open("wb") as fh:
-                while offset <= total:
-                    if ctx:
-                        ctx.raise_if_cancelled()
-                        ctx.progress((offset - 1) / total if total else None, "Downloading backup")
-                    row = cur.execute(
-                        f"SELECT SUBSTRING(BulkColumn, ?, ?) FROM {source}",
-                        offset,
-                        SQL_TRANSFER_CHUNK,
-                    ).fetchone()
-                    chunk = bytes(row[0])
-                    if not chunk:
-                        break
-                    fh.write(chunk)
-                    offset += len(chunk)
+            try:
+                with destination.open("wb") as fh:
+                    while offset <= total:
+                        if ctx:
+                            ctx.raise_if_cancelled()
+                            ctx.progress((offset - 1) / total, "Downloading backup")
+                        row = cur.execute(
+                            "SELECT SUBSTRING(data, ?, ?) FROM #dbnero_blob",
+                            offset,
+                            SQL_TRANSFER_CHUNK,
+                        ).fetchone()
+                        chunk = bytes(row[0])
+                        if not chunk:
+                            break
+                        fh.write(chunk)
+                        offset += len(chunk)
+            finally:
+                with contextlib.suppress(pyodbc.Error):
+                    cur.execute("DROP TABLE #dbnero_blob")
         if destination.stat().st_size != total:
             raise AdapterError("Downloaded backup size does not match the server file")
 
@@ -449,7 +480,7 @@ class MSSQLAdapter:
 
         server_path, staged = self._stage_for_restore(source, options, ctx)
         try:
-            with self._connect() as conn:
+            with self._connect(MASTER) as conn:
                 cur = conn.cursor()
                 files = cur.execute(
                     f"RESTORE FILELISTONLY FROM DISK = {_literal(server_path)}"
@@ -480,13 +511,13 @@ class MSSQLAdapter:
                 f"RESTORE DATABASE {_quote(target_database)} FROM DISK = {_literal(server_path)} "
                 f"WITH {', '.join(moves)}, CHECKSUM, RECOVERY, STATS = 5"
             )
-            self._run_with_messages(sql, ctx, "Restore")
+            self._run_with_messages(sql, ctx, "Restore", MASTER)
         finally:
             if staged is not None:
                 staged.unlink(missing_ok=True)
         return RestoreResult(target_database=target_database)
 
-    def validate_backup(self, source: Path) -> ValidationResult:
+    def validate_backup(self, source: Path, ctx: JobContext | None = None) -> ValidationResult:
         if not source.is_file():
             return ValidationResult(False, [], [f"File not found: {source}"])
         with source.open("rb") as fh:
@@ -502,6 +533,7 @@ class MSSQLAdapter:
                 f"RESTORE VERIFYONLY FROM DISK = {_literal(server_path)} WITH CHECKSUM",
                 None,
                 "Verify",
+                MASTER,
             )
         except AdapterError as exc:
             return ValidationResult(False, [], [str(exc)])
