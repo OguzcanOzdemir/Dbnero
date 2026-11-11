@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dbnero"
+version = "0.1.0.dev0"
+description = "Cross-platform desktop app for backing up, restoring and comparing MSSQL, MySQL and PostgreSQL databases."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.7",
+    "SQLAlchemy>=2.0",
+    "keyring>=25.0",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+postgresql = ["psycopg[binary]>=3.2"]
+mysql = ["mysql-connector-python>=9.0"]
+mssql = ["pyodbc>=5.1"]
+all = ["dbnero[postgresql,mysql,mssql]"]
+dev = [
+    "pytest>=8.0",
+    "pytest-qt>=4.4",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[project.scripts]
+dbnero = "dbnero.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dbnero"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = "-ra"
+markers = [
+    "integration: needs real database servers (see tests/integration)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["keyring.*"]
+ignore_missing_imports = true

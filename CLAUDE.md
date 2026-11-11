@@ -40,14 +40,20 @@ Katman kuralları:
 ### Adaptör sözleşmesi
 
 ```python
-class DatabaseAdapter(Protocol):
-    def test_connection(self) -> None: ...
-    def list_databases(self) -> list[str]: ...
-    def backup(self, database: str, destination: Path, options: dict) -> BackupResult: ...
-    def restore(self, source: Path, target_database: str, options: dict) -> RestoreResult: ...
+class DatabaseAdapter(Protocol):          # src/dbnero/adapters/base.py
+    profile: ConnectionProfile
+    def test_connection(self) -> str: ...  # returns server version, raises ConnectionFailed
+    def list_databases(self, include_system: bool = False) -> list[str]: ...
+    def backup(self, database: str, destination: Path, options: dict, ctx: JobContext | None = None) -> BackupResult: ...
+    def restore(self, source: Path, target_database: str, options: dict, ctx: JobContext | None = None) -> RestoreResult: ...
     def inspect_schema(self, database: str) -> SchemaSnapshot: ...
     def validate_backup(self, source: Path) -> ValidationResult: ...
 ```
+
+- Adaptörler `create_adapter(profile, password)` ile oluşturulur; motor → fabrika eşlemesi `register_adapter` ile yapılır.
+- `JobContext`: iptal bayrağı (`raise_if_cancelled`) + ilerleme geri çağrısı (`progress`).
+- Harici araçlar **yalnızca** `adapters/process.run_tool` ile çalıştırılır; parola dosyaları `process.secret_file` ile.
+- Dinamik SQL'de isimler `adapters/identifiers.quote_identifier` ile kaçışlanır.
 
 Yeni motor eklemek = `adapters/` altında bu protokolü uygulamak + entegrasyon testleri.
 
@@ -81,7 +87,7 @@ Yeni motor eklemek = `adapters/` altında bu protokolü uygulamak + entegrasyon 
 
 `backup_id` (UUID), `batch_id`, `connection_id`, `engine`, `engine_version`, `database_name`, `created_at_utc`, `description`, `tags`, `backup_format`, `backup_mode`, `file_path`, `file_size`, `checksum_sha256`, `status`, `tool_versions`, `schema_snapshot_path`, `comparison_snapshot_path`.
 
-Şema değişiklikleri için migration kullan (Alembic veya basit sürümlü migration); mevcut kullanıcı kataloglarını bozma.
+Şema değişiklikleri `storage/migrations.py` içindeki sıralı listeye **yeni bir migration eklenerek** yapılır (`PRAGMA user_version`). Yayınlanmış migration düzenlenmez. Yeni sütun eklersen `storage/catalog.py` içindeki `Table` tanımını da güncelle. `created_at_utc` bir SQLite trigger'ı ile de korunur.
 
 ## Dosya ve isimlendirme düzeni
 
@@ -104,7 +110,9 @@ ruff check . && ruff format --check .
 mypy src
 ```
 
-(Bu komutlar `pyproject.toml` oluşturulduktan sonra geçerli olacaktır; araç seçimi değişirse burayı güncelle.)
+Linux'ta Qt testleri için sistem kütüphaneleri gerekir: `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3`. Başsız ortamda `QT_QPA_PLATFORM=offscreen` kullan (`tests/conftest.py` bunu otomatik ayarlar).
+
+Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz olmalı.
 
 ## Test kuralları
 
@@ -112,6 +120,24 @@ mypy src
 - Yedekle → doğrula → geri yükle → şema karşılaştır döngüsü her motor için entegrasyon testiyle doğrulanır (`tests/integration`, Docker Compose).
 - UI testleri için `pytest-qt`.
 - Bir değişikliği "tamam" saymadan önce ilgili testleri çalıştır.
+
+## Kod konumları (hızlı başvuru)
+
+| Konu | Dosya |
+|---|---|
+| Domain modelleri, enum'lar | `src/dbnero/core/models.py` |
+| Ayarlar (platformdirs, JSON) | `src/dbnero/core/settings.py` |
+| Loglama + parola maskeleme | `src/dbnero/core/logging_setup.py` |
+| Katalog / migration | `src/dbnero/storage/catalog.py`, `storage/migrations.py` |
+| Arşiv yolları, atomik yazma, SHA-256 | `src/dbnero/storage/archive.py` |
+| Manifest okuma/yazma | `src/dbnero/storage/manifests.py` |
+| Katalogu arşivden yeniden kurma | `src/dbnero/core/catalog_service.py` |
+| Adaptör sözleşmesi, registry | `src/dbnero/adapters/base.py` |
+| Alt süreç çalıştırma | `src/dbnero/adapters/process.py` |
+| Araç keşfi | `src/dbnero/adapters/tools.py` |
+| Şema anlık görüntüsü modeli | `src/dbnero/compare/snapshots.py` |
+| Keyring | `src/dbnero/security/credentials.py` |
+| Ana pencere | `src/dbnero/ui/main_window.py` |
 
 ## Kapsam dışı (MVP)
 

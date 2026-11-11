@@ -7,48 +7,48 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 
 ## Aşama 0 — Kararlar ve hazırlık
 
-- [ ] Ürün adı `dbnero` olarak sabitlendi; paket adı `dbnero` **(MVP)**
+- [x] Ürün adı `dbnero` olarak sabitlendi; paket adı `dbnero` **(MVP)**
 - [ ] Lisans seçimi (MIT / Apache-2.0 / özel)
 - [ ] Desteklenecek minimum motor sürümlerini belirle (ör. PostgreSQL 13+, MySQL 8.0+, SQL Server 2017+)
 - [ ] `docs/backup-compatibility.md`: motor sürümü × araç sürümü uyumluluk matrisi taslağı
 - [ ] Paketleme aracı kararı: PyInstaller mı Nuitka mı (kısa PoC ile)
-- [ ] Katalog migration yaklaşımı: Alembic mi basit sürümlü migration mı
+- [x] Katalog migration yaklaşımı: **basit sürümlü migration** (`PRAGMA user_version`, `storage/migrations.py`)
 
 ## Aşama 1 — Temel altyapı
 
 ### Proje iskeleti **(MVP)**
-- [ ] `pyproject.toml` (src-layout, Python 3.12+, bağımlılıklar, `[dev]` extras)
-- [ ] Dizin yapısı: `src/dbnero/{ui,core,adapters,compare,storage,security}`, `tests/{unit,integration}`, `docs/`
-- [ ] `python -m dbnero` giriş noktası (`main.py`, `__main__.py`)
-- [ ] Ruff + mypy + pytest yapılandırması
-- [ ] `.gitignore`, `.editorconfig`
-- [ ] GitHub Actions CI: lint + unit test (Windows / macOS / Linux matrisi)
-- [ ] Logging altyapısı (dosyaya dönen log, parola maskeleme filtresi)
-- [ ] Uygulama ayarları (arşiv kökü, araç yolları, eşzamanlılık) — platforma uygun config dizini (`platformdirs`)
+- [x] `pyproject.toml` (src-layout, Python 3.12+, bağımlılıklar, `[dev]` extras)
+- [x] Dizin yapısı: `src/dbnero/{ui,core,adapters,compare,storage,security}`, `tests/{unit,integration}`, `docs/`
+- [x] `python -m dbnero` giriş noktası (`main.py`, `__main__.py`)
+- [x] Ruff + mypy + pytest yapılandırması
+- [x] `.gitignore`, `.editorconfig`
+- [x] GitHub Actions CI: lint + unit test (Windows / macOS / Linux matrisi)
+- [x] Logging altyapısı (dosyaya dönen log, parola maskeleme filtresi)
+- [x] Uygulama ayarları (arşiv kökü, araç yolları, eşzamanlılık) — platforma uygun config dizini (`platformdirs`)
 
 ### Domain modelleri **(MVP)**
-- [ ] `core/models.py`: `ConnectionProfile`, `BackupRecord`, `BackupBatch`, `Job`, `BackupResult`, `RestoreResult`, `ValidationResult`
-- [ ] `compare/snapshots.py`: normalize `SchemaSnapshot` modeli (tablo, sütun, tip, null, default, PK, FK, indeks, view, trigger, routine)
-- [ ] Status enum'ları (pending / running / succeeded / failed / unverified / cancelled)
+- [x] `core/models.py`: `ConnectionProfile`, `BackupRecord`, `BackupBatch`, `Job`, `BackupResult`, `RestoreResult`, `ValidationResult`
+- [x] `compare/snapshots.py`: normalize `SchemaSnapshot` modeli (tablo, sütun, tip, null, default, PK, FK, indeks, view, trigger, routine)
+- [x] Status enum'ları (pending / running / succeeded / failed / unverified / cancelled)
 
 ### Adaptör sözleşmesi **(MVP)**
-- [ ] `adapters/base.py`: `DatabaseAdapter` Protocol
-- [ ] Adaptör fabrikası / registry (motor adı → adaptör)
-- [ ] Ortak `subprocess` yardımcısı: `shell=False`, zaman aşımı, iptal, stderr yakalama, ilerleme
-- [ ] Harici araç keşfi: `pg_dump`, `pg_restore`, `mysqldump`, `mysql`, ODBC driver; sürüm tespiti
+- [x] `adapters/base.py`: `DatabaseAdapter` Protocol
+- [x] Adaptör fabrikası / registry (motor adı → adaptör)
+- [x] Ortak `subprocess` yardımcısı: `shell=False`, zaman aşımı, iptal, stderr yakalama, ilerleme
+- [x] Harici araç keşfi: `pg_dump`, `pg_restore`, `mysqldump`, `mysql`, ODBC driver; sürüm tespiti
 
 ### Güvenlik **(MVP)**
-- [ ] `security/credentials.py`: keyring sarmalayıcı (kaydet / oku / sil)
-- [ ] Keyring yoksa (headless Linux) anlaşılır hata ve yönlendirme
-- [ ] Araçlara parolayı argümansız iletme: `PGPASSWORD` / geçici `.pgpass`, MySQL `--defaults-extra-file` (0600, iş sonunda silinir)
-- [ ] SQL tanımlayıcı doğrulama/kaçışlama yardımcıları (motor bazında)
+- [x] `security/credentials.py`: keyring sarmalayıcı (kaydet / oku / sil)
+- [x] Keyring yoksa (headless Linux) anlaşılır hata ve yönlendirme
+- [ ] Araçlara parolayı argümansız iletme: `PGPASSWORD` / geçici `.pgpass`, MySQL `--defaults-extra-file` (0600, iş sonunda silinir) — `secret_file` yardımcısı hazır, adaptörlerde kullanılacak
+- [x] SQL tanımlayıcı doğrulama/kaçışlama yardımcıları (motor bazında)
 
 ### SQLite katalog **(MVP)**
-- [ ] SQLAlchemy modelleri: `connections`, `backups`, `batches`, `jobs`, `job_logs`
-- [ ] `backups` tablosu dokümandaki tüm alanları içerir (`backup_id` UUID, `batch_id`, `created_at_utc`, `checksum_sha256`, `tool_versions`, `schema_snapshot_path` …)
-- [ ] `created_at_utc` değiştirilemez; isteğe bağlı `reference_date` ayrı alan
-- [ ] `storage/catalog.py`: CRUD + filtreleme (tarih, DB, sunucu, motor, etiket)
-- [ ] Migration altyapısı
+- [x] SQLAlchemy modelleri: `connections`, `backups`, `batches`, `jobs`, `job_logs`
+- [x] `backups` tablosu dokümandaki tüm alanları içerir (`backup_id` UUID, `batch_id`, `created_at_utc`, `checksum_sha256`, `tool_versions`, `schema_snapshot_path` …)
+- [x] `created_at_utc` değiştirilemez; isteğe bağlı `reference_date` ayrı alan
+- [x] `storage/catalog.py`: CRUD + filtreleme (tarih, DB, sunucu, motor, etiket)
+- [x] Migration altyapısı
 
 ### Bağlantı yönetimi **(MVP)**
 - [ ] Bağlantı profili oluştur / düzenle / sil (host, port, kullanıcı, auth türü, TLS/SSL, varsayılan DB)
@@ -58,7 +58,7 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [ ] Motor sürümü tespiti
 
 ### UI temeli **(MVP)**
-- [ ] `ui/main_window.py`: yan menülü ana pencere (Genel Bakış, Bağlantılar, Yeni Yedek, Arşiv, Geri Yükle, Karşılaştır, İş Geçmişi, Ayarlar)
+- [x] `ui/main_window.py`: yan menülü ana pencere (Genel Bakış, Bağlantılar, Yeni Yedek, Arşiv, Geri Yükle, Karşılaştır, İş Geçmişi, Ayarlar)
 - [ ] `ui/connections_page.py`: profil listesi, form, test butonu, DB keşfi
 - [ ] İş yürütücü: `QThreadPool` + sinyallerle ilerleme / log / iptal
 - [ ] İlk çalıştırma sihirbazı: araç ve sürücü kontrolü, eksikler için kurulum talimatı
@@ -68,11 +68,11 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 ## Aşama 2 — Yedekleme
 
 ### Arşiv ve manifest **(MVP)**
-- [ ] `storage/archive.py`: `arşiv/<motor>/<sunucu>/<db>/<yıl>/<ay>/` düzeni, isim sanitize
-- [ ] Dosya adı: `YYYY-MM-DD_HHMMSS_<motor>_<db>_<kısa_id>.<uzantı>`
-- [ ] Geçici dosyaya yazma → SHA-256 → atomik rename
-- [ ] `storage/manifests.py`: `manifest.json` yaz/oku (sır içermez)
-- [ ] Manifest'lerden kataloğu yeniden içe aktarma (katalog kaybı senaryosu)
+- [x] `storage/archive.py`: `arşiv/<motor>/<sunucu>/<db>/<yıl>/<ay>/` düzeni, isim sanitize
+- [x] Dosya adı: `YYYY-MM-DD_HHMMSS_<motor>_<db>_<kısa_id>.<uzantı>`
+- [x] Geçici dosyaya yazma → SHA-256 → atomik rename
+- [x] `storage/manifests.py`: `manifest.json` yaz/oku (sır içermez)
+- [x] Manifest'lerden kataloğu yeniden içe aktarma (katalog kaybı senaryosu)
 
 ### Motor adaptörleri — yedek **(MVP)**
 - [ ] **PostgreSQL:** `pg_dump --format=custom` → `.dump`
