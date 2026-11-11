@@ -130,7 +130,7 @@ def _compare_table(
 
     if opts.count_only or not columns:
         diff.identical = diff.left_rows == diff.right_rows
-        diff.note = "Row counts only" if opts.count_only else "No common columns"
+        diff.note = "Yalnızca satır sayıları" if opts.count_only else "Ortak sütun yok"
         return diff
 
     if key and all(k in columns for k in key):
@@ -151,17 +151,17 @@ def _compare_table(
                 diff.method = DataMethod.COUNT_ONLY
                 diff.identical = None
                 diff.note = (
-                    "Key ordering differs from Python ordering (collation) and the table is "
-                    "too large for in-memory comparison; only row counts compared"
+                    "Anahtar sıralaması harmanlamaya (collation) bağlı ve tablo bellekte "
+                    "karşılaştırılamayacak kadar büyük; yalnızca satır sayıları karşılaştırıldı"
                 )
                 return diff
             _hash_join(stream(left, left_db, lt), stream(right, right_db, rt), key_idx, diff, opts)
-            diff.note = "Compared in memory (collation-dependent key order)"
+            diff.note = "Bellekte karşılaştırıldı (harmanlamaya bağlı anahtar sırası)"
         diff.identical = diff.added == diff.removed == diff.changed == 0
         return diff
 
     diff.method = DataMethod.FINGERPRINT
-    diff.note = "No primary key: compared with an order-independent fingerprint"
+    diff.note = "Birincil anahtar yok: sıradan bağımsız parmak iziyle karşılaştırıldı"
     lf = _fingerprint(left.iter_rows(left_db, lt.schema, lt.name, columns, [], opts.batch_size))
     rf = _fingerprint(right.iter_rows(right_db, rt.schema, rt.name, columns, [], opts.batch_size))
     diff.identical = lf == rf and diff.left_rows == diff.right_rows

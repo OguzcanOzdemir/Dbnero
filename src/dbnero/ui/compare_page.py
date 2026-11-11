@@ -52,6 +52,7 @@ KIND_TEXT = {
     ChangeKind.REMOVED: "Silindi",
     ChangeKind.CHANGED: "Değişti",
 }
+METHOD_TEXT = {"keyed": "Anahtar", "fingerprint": "Parmak izi", "count_only": "Satır sayısı"}
 CATEGORY_TEXT = {
     "table": "Tablolar",
     "column": "Sütunlar",
@@ -433,7 +434,7 @@ class ComparePage(QWidget):
                 for c, v in enumerate(
                     [
                         t.table,
-                        t.method.value,
+                        METHOD_TEXT.get(t.method.value, t.method.value),
                         t.left_rows,
                         t.right_rows,
                         t.added,

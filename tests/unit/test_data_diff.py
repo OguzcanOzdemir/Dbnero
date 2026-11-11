@@ -60,7 +60,7 @@ def test_fallback_when_db_order_differs_from_python(monkeypatch):
     monkeypatch.setattr(FakeAdapter, "iter_rows", ci_rows)
     (t,) = compare_data(la, "db", la.inspect_schema("db"), ra, "db", ra.inspect_schema("db")).tables
     assert (t.added, t.removed, t.changed) == (0, 0, 1)
-    assert "memory" in t.note
+    assert "Bellekte" in t.note
 
 
 def test_fingerprint_for_tables_without_key():

@@ -23,7 +23,7 @@ from dbnero.core.app import AppContext
 from dbnero.core.jobs import Job
 from dbnero.ui.archive_page import ArchivePage
 from dbnero.ui.backup_page import BackupPage
-from dbnero.ui.common import JobBridge
+from dbnero.ui.common import JOB_STATUS_TEXT, JobBridge
 from dbnero.ui.compare_page import ComparePage
 from dbnero.ui.connections_page import ConnectionsPage
 from dbnero.ui.jobs_page import JobsPage
@@ -147,7 +147,7 @@ class MainWindow(QMainWindow):
 
     def _on_job_finished(self, job: Job) -> None:
         self._update_job_status()
-        self.statusBar().showMessage(f"{job.title}: {job.status.value}", 8000)
+        self.statusBar().showMessage(f"{job.title}: {JOB_STATUS_TEXT[job.status]}", 8000)
 
     def show_page(self, key: str) -> None:
         self.nav.setCurrentRow(self._page_index[key])
