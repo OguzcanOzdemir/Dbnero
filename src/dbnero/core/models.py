@@ -127,6 +127,7 @@ class BackupRecord:
     tool_versions: dict[str, str] = field(default_factory=dict)
     schema_snapshot_path: Path | None = None
     comparison_snapshot_path: Path | None = None
+    extra: dict[str, str] = field(default_factory=dict)
     backup_id: str = field(default_factory=new_id)
     # Assigned by the system and immutable after creation.
     created_at_utc: datetime = field(default_factory=utc_now)
@@ -154,6 +155,8 @@ class BackupResult:
     engine_version: str = ""
     tool_versions: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    # Engine-specific facts worth keeping (e.g. MSSQL server-side .bak path).
+    extra: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

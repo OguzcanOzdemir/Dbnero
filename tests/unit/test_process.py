@@ -65,3 +65,33 @@ def test_secret_file_private_and_removed():
         if sys.platform != "win32":
             assert (path.stat().st_mode & 0o777) == 0o600
     assert not path.exists()
+
+
+def test_stdout_sink_and_stdin_source():
+    received: list[bytes] = []
+    run_tool(
+        [PY, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read().upper())"],
+        stdin_source=iter([b"abc", b"def"]),
+        stdout_sink=received.append,
+    )
+    assert b"".join(received) == b"ABCDEF"
+
+
+def test_stderr_line_callback():
+    lines: list[str] = []
+    run_tool(
+        [PY, "-c", "import sys; sys.stderr.write('one\\ntwo\\n')"],
+        on_stderr_line=lines.append,
+    )
+    assert lines == ["one", "two"]
+
+
+def test_sink_error_propagates():
+    def bad_sink(_chunk: bytes) -> None:
+        raise OSError("disk full")
+
+    with pytest.raises(AdapterError, match="disk full"):
+        run_tool(
+            [PY, "-c", "import sys; sys.stdout.write('x' * 10)"],
+            stdout_sink=bad_sink,
+        )

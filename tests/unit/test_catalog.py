@@ -71,6 +71,7 @@ def test_backup_roundtrip(catalog):
     rec = _backup(
         tags=["nightly", "prod"],
         tool_versions={"pg_dump": "16.4"},
+        extra={"server_file_path": "/var/opt/x.bak"},
         description="Before release",
         schema_snapshot_path=Path("/arch/s.json"),
     )
@@ -165,3 +166,45 @@ def test_jobs_and_logs(catalog):
     (got,) = catalog.list_jobs()
     assert got.status is m.JobStatus.FAILED and got.finished_at_utc is not None
     assert [msg for _, _, msg in catalog.job_logs("j1")] == ["started", "failed"]
+
+
+def test_upgrade_from_v1_keeps_data(tmp_path):
+    """A catalog created by schema v1 is upgraded in place without data loss."""
+    from sqlalchemy import create_engine, text
+
+    from dbnero.storage.migrations import MIGRATIONS
+
+    path = tmp_path / "old.db"
+    eng = create_engine(f"sqlite:///{path}")
+    with eng.begin() as conn:
+        for stmt in MIGRATIONS[0]:
+            conn.execute(text(stmt))
+        conn.exec_driver_sql("PRAGMA user_version = 1")
+        conn.exec_driver_sql(
+            "INSERT INTO backups (backup_id, connection_id, engine, server_label, database_name,"
+            " created_at_utc, backup_format, backup_mode, file_path, status)"
+            " VALUES ('b1', 'c1', 'mysql', 's', 'd', '2026-01-01T00:00:00+00:00', 'sql',"
+            " 'single', '/x.sql', 'succeeded')"
+        )
+    eng.dispose()
+
+    cat = Catalog(path)
+    try:
+        got = cat.get_backup("b1")
+        assert got.extra == {} and got.database_name == "d"
+    finally:
+        cat.close()
+
+
+def test_refuses_newer_catalog(tmp_path):
+    from sqlalchemy import create_engine
+
+    from dbnero.storage.migrations import CatalogTooNew
+
+    path = tmp_path / "new.db"
+    eng = create_engine(f"sqlite:///{path}")
+    with eng.begin() as conn:
+        conn.exec_driver_sql("PRAGMA user_version = 999")
+    eng.dispose()
+    with pytest.raises(CatalogTooNew):
+        Catalog(path)

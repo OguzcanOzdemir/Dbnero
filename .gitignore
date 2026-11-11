@@ -19,3 +19,4 @@ htmlcov/
 *.bak
 *.sql.gz
 .env
+.mssql-share/

@@ -61,6 +61,7 @@ def record_to_manifest(record: BackupRecord) -> dict[str, Any]:
         "tool_versions": dict(record.tool_versions),
         "schema_snapshot": _rel(record.schema_snapshot_path, base),
         "comparison_snapshot": _rel(record.comparison_snapshot_path, base),
+        "extra": dict(record.extra),
     }
 
 
@@ -108,6 +109,7 @@ def read_manifest(path: Path) -> BackupRecord:
             tool_versions=dict(data.get("tool_versions", {})),
             schema_snapshot_path=base / schema if schema else None,
             comparison_snapshot_path=base / comparison if comparison else None,
+            extra=dict(data.get("extra", {})),
         )
     except (KeyError, ValueError, TypeError) as exc:
         raise InvalidManifest(f"{path}: {exc}") from exc

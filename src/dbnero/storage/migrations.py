@@ -102,7 +102,12 @@ _V1 = [
     "CREATE INDEX ix_job_logs_job ON job_logs(job_id)",
 ]
 
-MIGRATIONS: list[list[str]] = [_V1]
+# v2: engine-specific extra metadata (e.g. MSSQL server-side .bak path).
+_V2 = [
+    "ALTER TABLE backups ADD COLUMN extra TEXT NOT NULL DEFAULT '{}'",
+]
+
+MIGRATIONS: list[list[str]] = [_V1, _V2]
 
 LATEST_VERSION = len(MIGRATIONS)
 

@@ -125,6 +125,7 @@ backups_t = Table(
     Column("tool_versions", JSONText, nullable=False),
     Column("schema_snapshot_path", String),
     Column("comparison_snapshot_path", String),
+    Column("extra", JSONText, nullable=False),
 )
 
 jobs_t = Table(
@@ -198,6 +199,7 @@ _MUTABLE_BACKUP_FIELDS = frozenset(
         "backup_format",
         "schema_snapshot_path",
         "comparison_snapshot_path",
+        "extra",
     }
 )
 
@@ -501,6 +503,7 @@ def _backup_to_values(r: m.BackupRecord) -> dict[str, Any]:
         "tool_versions": dict(r.tool_versions),
         "schema_snapshot_path": _to_db_value(r.schema_snapshot_path),
         "comparison_snapshot_path": _to_db_value(r.comparison_snapshot_path),
+        "extra": dict(r.extra),
     }
 
 
@@ -527,4 +530,5 @@ def _row_to_backup(row: Row[Any]) -> m.BackupRecord:
         tool_versions=dict(row.tool_versions or {}),
         schema_snapshot_path=_opt_path(row.schema_snapshot_path),
         comparison_snapshot_path=_opt_path(row.comparison_snapshot_path),
+        extra=dict(row.extra or {}),
     )
