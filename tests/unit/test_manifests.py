@@ -44,9 +44,9 @@ def test_roundtrip(tmp_path):
 def test_manifest_is_portable_and_secret_free(tmp_path):
     rec, paths = _record(tmp_path)
     write_manifest(rec, paths.manifest)
-    data = json.loads(paths.manifest.read_text())
+    data = json.loads(paths.manifest.read_text("utf-8"))
     assert data["file_name"] == rec.file_path.name
-    assert str(tmp_path) not in paths.manifest.read_text()
+    assert str(tmp_path) not in paths.manifest.read_text("utf-8")
     assert not any("pass" in k for k in data)
 
     moved = tmp_path.parent / (tmp_path.name + "_moved")

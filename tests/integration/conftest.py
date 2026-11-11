@@ -105,7 +105,7 @@ def target(request: pytest.FixtureRequest) -> EngineTarget:
 def seed_database(target: EngineTarget, name: str) -> None:
     adapter = target.adapter()
     adapter.create_database(name)
-    sql = (SEED_DIR / f"{target.profile.engine.value}.sql").read_text()
+    sql = (SEED_DIR / f"{target.profile.engine.value}.sql").read_text("utf-8")
     engine = target.profile.engine
     if engine is Engine.POSTGRESQL:
         import psycopg

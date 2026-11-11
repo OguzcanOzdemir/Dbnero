@@ -107,7 +107,7 @@ def test_mysql_backup_uses_defaults_file(monkeypatch, tmp_path):
         argv = [str(a) for a in args]
         seen["argv"] = argv
         cnf = Path(argv[1].split("=", 1)[1])
-        seen["cnf"] = cnf.read_text()
+        seen["cnf"] = cnf.read_text("utf-8")
         kw["stdout_sink"](b"-- dump\n-- Dump completed on 2026\n")
 
     monkeypatch.setattr(mysql_mod, "run_tool", fake_run)

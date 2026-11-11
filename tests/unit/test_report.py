@@ -40,27 +40,27 @@ def _report():
 def test_json_excludes_row_data_by_default(tmp_path):
     p = tmp_path / "r.json"
     export_report(_report(), p)
-    data = json.loads(p.read_text())
+    data = json.loads(p.read_text("utf-8"))
     assert data["contains_row_data"] is False
     assert "samples" not in data["data"]["tables"][0]
     export_report(_report(), p, include_row_data=True)
-    sample = json.loads(p.read_text())["data"]["tables"][0]["samples"][0]
+    sample = json.loads(p.read_text("utf-8"))["data"]["tables"][0]["samples"][0]
     assert sample["left"] == [1, "1.5", "2026-01-01"] and sample["right"][1] == "0x0001"
 
 
 def test_html_escapes_and_warns(tmp_path):
     p = tmp_path / "r.html"
     export_report(_report(), p, include_row_data=True)
-    text = p.read_text()
+    text = p.read_text("utf-8")
     assert "public.&lt;x&gt;" in text and SENSITIVE_WARNING in text
     export_report(_report(), p)
-    assert SENSITIVE_WARNING not in p.read_text()
+    assert SENSITIVE_WARNING not in p.read_text("utf-8")
 
 
 def test_csv(tmp_path):
     p = tmp_path / "r.csv"
     export_report(_report(), p)
-    rows = list(csv.reader(p.open()))
+    rows = list(csv.reader(p.open(encoding="utf-8")))
     assert rows[0][0] == "section" and rows[1][:3] == ["schema", "table", "added"]
     assert rows[2][0] == "data"
 

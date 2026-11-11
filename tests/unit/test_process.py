@@ -14,7 +14,7 @@ def test_stdout_to_file(tmp_path):
     out = tmp_path / "out.bin"
     with out.open("wb") as fh:
         run_tool([PY, "-c", "import sys; sys.stdout.write('hello')"], stdout=fh)
-    assert out.read_text() == "hello"
+    assert out.read_text("utf-8") == "hello"
 
 
 def test_env_is_passed_not_argv(tmp_path):
@@ -25,7 +25,7 @@ def test_env_is_passed_not_argv(tmp_path):
             env={"PGPASSWORD": "s3cret"},
             stdout=fh,
         )
-    assert out.read_text() == "s3cret"
+    assert out.read_text("utf-8") == "s3cret"
 
 
 def test_failure_raises_with_stderr():
@@ -61,7 +61,7 @@ def test_timeout():
 
 def test_secret_file_private_and_removed():
     with secret_file("[client]\npassword=x\n", suffix=".cnf") as path:
-        assert path.read_text().startswith("[client]")
+        assert path.read_text("utf-8").startswith("[client]")
         if sys.platform != "win32":
             assert (path.stat().st_mode & 0o777) == 0o600
     assert not path.exists()

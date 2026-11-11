@@ -96,7 +96,7 @@ class FakeAdapter:
         exists = target_database in self.server.databases
         if exists and not options.get("overwrite"):
             raise AdapterError("already exists")
-        payload = json.loads(source.read_text().split("\n", 1)[1])
+        payload = json.loads(source.read_text("utf-8").split("\n", 1)[1])
         self.server.databases[target_database] = {
             name: FakeTable(t["columns"], t["pk"], [tuple(r) for r in t["rows"]])
             for name, t in payload.items()
@@ -105,7 +105,7 @@ class FakeAdapter:
         return RestoreResult(target_database)
 
     def validate_backup(self, source: Path) -> ValidationResult:
-        ok = source.is_file() and source.read_text().startswith(MAGIC)
+        ok = source.is_file() and source.read_text("utf-8").startswith(MAGIC)
         return ValidationResult(ok, ["fake ok"] if ok else [], [] if ok else ["bad fake dump"])
 
     def inspect_schema(self, database: str) -> SchemaSnapshot:

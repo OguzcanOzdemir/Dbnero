@@ -22,9 +22,9 @@ def test_single_backup_writes_everything(world):
     assert rec.tags == ["prod", "x"]
     assert rec.schema_snapshot_path and rec.schema_snapshot_path.is_file()
     manifest = next(rec.file_path.parent.glob("*.manifest.json"))
-    data = json.loads(manifest.read_text())
+    data = json.loads(manifest.read_text("utf-8"))
     assert data["backup_id"] == rec.backup_id and data["checksum_sha256"] == rec.checksum_sha256
-    assert "secret-pw" not in manifest.read_text()
+    assert "secret-pw" not in manifest.read_text("utf-8")
     stored = world.app.catalog.get_backup(rec.backup_id)
     assert stored.status is BackupStatus.SUCCEEDED and stored.file_size == rec.file_size
     assert stored.backup_mode is BackupMode.SINGLE
@@ -152,5 +152,5 @@ def test_update_metadata_rewrites_manifest(world):
     updated = svc.update_metadata(rec.backup_id, " new ", ["a", "a", "b"])
     assert updated.description == "new" and updated.tags == ["a", "b"]
     assert updated.created_at_utc == rec.created_at_utc
-    data = json.loads(manifest_path(rec).read_text())
+    data = json.loads(manifest_path(rec).read_text("utf-8"))
     assert data["description"] == "new" and data["tags"] == ["a", "b"]
