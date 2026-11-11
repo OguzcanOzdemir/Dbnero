@@ -219,9 +219,13 @@ class ConnectionsPage(QWidget):
         self.username.setText(p.username)
         self.password.clear()
         has_pw = self.app.connections.has_password(p.id)
-        self.password_hint.setText(
-            "Kayıtlı parola var; değiştirmek için yazın." if has_pw else "Kayıtlı parola yok."
-        )
+        hint = "Kayıtlı parola var; değiştirmek için yazın." if has_pw else "Kayıtlı parola yok."
+        if not self.app.connections.credential_store_available():
+            hint += (
+                " ⚠ Güvenli parola kasası bulunamadı: parolalar yalnızca bu oturum boyunca "
+                "bellekte tutulur."
+            )
+        self.password_hint.setText(hint)
         self.ssl.setCurrentIndex(self.ssl.findData(p.ssl_mode))
         self.default_db.setText(p.default_database)
         idx = self.odbc_driver.findData(p.options.get("odbc_driver", ""))

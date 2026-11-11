@@ -3,15 +3,17 @@
 Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterlerinden türetilmiştir.
 İşaretler: `[ ]` yapılacak · `[x]` tamamlandı · **(MVP)** ilk çalışan sürüm için zorunlu.
 
+**Durum:** MVP ve Aşama 1–6 tamamlandı. Açık kalanlar: macOS imzalama/notarization ve Windows/macOS üzerinde arayüzün CI ile doğrulanması.
+
 ---
 
 ## Aşama 0 — Kararlar ve hazırlık
 
 - [x] Ürün adı `dbnero` olarak sabitlendi; paket adı `dbnero` **(MVP)**
-- [ ] Lisans seçimi (MIT / Apache-2.0 / özel)
-- [ ] Desteklenecek minimum motor sürümlerini belirle (ör. PostgreSQL 13+, MySQL 8.0+, SQL Server 2017+)
-- [ ] `docs/backup-compatibility.md`: motor sürümü × araç sürümü uyumluluk matrisi taslağı
-- [ ] Paketleme aracı kararı: PyInstaller mı Nuitka mı (kısa PoC ile)
+- [x] Lisans seçimi: **MIT** (`LICENSE`)
+- [x] Desteklenecek minimum motor sürümleri: PostgreSQL 12+, MySQL 8.0+, SQL Server 2017+
+- [x] `docs/backup-compatibility.md`: sürüm kuralları, yöntemler, sınırlamalar
+- [x] Paketleme aracı kararı: **PyInstaller** (`packaging/dbnero.spec`; Linux derlemesi doğrulandı)
 - [x] Katalog migration yaklaşımı: **basit sürümlü migration** (`PRAGMA user_version`, `storage/migrations.py`)
 
 ## Aşama 1 — Temel altyapı
@@ -39,8 +41,8 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 
 ### Güvenlik **(MVP)**
 - [x] `security/credentials.py`: keyring sarmalayıcı (kaydet / oku / sil)
-- [x] Keyring yoksa (headless Linux) anlaşılır hata ve yönlendirme
-- [ ] Araçlara parolayı argümansız iletme: `PGPASSWORD` / geçici `.pgpass`, MySQL `--defaults-extra-file` (0600, iş sonunda silinir) — `secret_file` yardımcısı hazır, adaptörlerde kullanılacak
+- [x] Keyring yoksa (headless Linux) parolalar yalnızca oturum boyunca bellekte tutulur, arayüz uyarır; ilk çalıştırma kontrolü kurulum yönlendirmesi verir
+- [x] Araçlara parolayı argümansız iletme: `PGPASSWORD`, MySQL `--defaults-extra-file` (0600, iş sonunda silinir)
 - [x] SQL tanımlayıcı doğrulama/kaçışlama yardımcıları (motor bazında)
 
 ### SQLite katalog **(MVP)**
@@ -51,17 +53,17 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Migration altyapısı
 
 ### Bağlantı yönetimi **(MVP)**
-- [ ] Bağlantı profili oluştur / düzenle / sil (host, port, kullanıcı, auth türü, TLS/SSL, varsayılan DB)
-- [ ] MSSQL: SQL auth + Windows auth (Windows'ta), ODBC driver seçimi, `TrustServerCertificate` seçeneği
-- [ ] **Bağlantıyı test et**
-- [ ] Veritabanlarını listeleme; sistem DB'lerini ayırma (`master/model/msdb/tempdb`, `mysql/sys/information_schema/performance_schema`, `template0/template1`)
-- [ ] Motor sürümü tespiti
+- [x] Bağlantı profili oluştur / düzenle / sil (host, port, kullanıcı, auth türü, TLS/SSL, varsayılan DB)
+- [x] MSSQL: SQL auth + Windows auth (Windows'ta), ODBC driver seçimi, `TrustServerCertificate` seçeneği
+- [x] **Bağlantıyı test et**
+- [x] Veritabanlarını listeleme; sistem DB'lerini ayırma (`master/model/msdb/tempdb`, `mysql/sys/information_schema/performance_schema`, `template0/template1`)
+- [x] Motor sürümü tespiti
 
 ### UI temeli **(MVP)**
 - [x] `ui/main_window.py`: yan menülü ana pencere (Genel Bakış, Bağlantılar, Yeni Yedek, Arşiv, Geri Yükle, Karşılaştır, İş Geçmişi, Ayarlar)
-- [ ] `ui/connections_page.py`: profil listesi, form, test butonu, DB keşfi
-- [ ] İş yürütücü: `QThreadPool` + sinyallerle ilerleme / log / iptal
-- [ ] İlk çalıştırma sihirbazı: araç ve sürücü kontrolü, eksikler için kurulum talimatı
+- [x] `ui/connections_page.py`: profil listesi, form, test butonu, DB keşfi
+- [x] İş yürütücü: `core/jobs.py` (Qt'den bağımsız thread pool) + `ui/common.JobBridge` sinyalleri; kısa çağrılar `QThreadPool` ile
+- [x] İlk çalıştırma sihirbazı: araç ve sürücü kontrolü, eksikler için kurulum talimatı
 
 **Aşama 1 çıktısı:** Uygulama açılır, bağlantılar güvenli şekilde yönetilir.
 
@@ -75,92 +77,92 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Manifest'lerden kataloğu yeniden içe aktarma (katalog kaybı senaryosu)
 
 ### Motor adaptörleri — yedek **(MVP)**
-- [ ] **PostgreSQL:** `pg_dump --format=custom` → `.dump`
-- [ ] **MySQL:** `mysqldump` → `.sql` / `.sql.gz`; InnoDB için `--single-transaction`; routine/trigger/event seçenekleri; MyISAM tutarlılık uyarısı
-- [ ] **MSSQL:** `BACKUP DATABASE ... TO DISK` (sunucu tarafı), `WITH CHECKSUM, COPY_ONLY` seçenekleri
-- [ ] **MSSQL:** `.bak`ı yerel arşive alma stratejisi (paylaşımlı dizin / UNC yolu; yoksa "sunucuda kaldı" olarak işaretle)
-- [ ] Yedek sırasında **şema anlık görüntüsü** (`inspect_schema`) alıp JSON olarak yanına kaydetme
-- [ ] Araç sürümlerini `tool_versions` alanına yazma
+- [x] **PostgreSQL:** `pg_dump --format=custom` → `.dump`
+- [x] **MySQL:** `mysqldump` → `.sql` / `.sql.gz`; InnoDB için `--single-transaction`; routine/trigger/event seçenekleri; MyISAM tutarlılık uyarısı
+- [x] **MSSQL:** `BACKUP DATABASE ... TO DISK` (sunucu tarafı), `WITH CHECKSUM, COPY_ONLY` seçenekleri
+- [x] **MSSQL:** `.bak`ı yerel arşive alma stratejisi (paylaşımlı dizin / UNC yolu; yoksa "sunucuda kaldı" olarak işaretle)
+- [x] Yedek sırasında **şema anlık görüntüsü** (`inspect_schema`) alıp JSON olarak yanına kaydetme
+- [x] Araç sürümlerini `tool_versions` alanına yazma
 
 ### Yedek servisleri **(MVP)**
-- [ ] `core/backup_service.py`: tekil yedek akışı (seç → açıklama/etiket → yedekle → doğrula → kataloğa ekle)
-- [ ] Toplu yedek: `batch_id`, **her DB için ayrı dosya + ayrı katalog kaydı**
-- [ ] Bir alt işin hatası diğerlerini etkilemez; DB bazında başarı/başarısızlık raporu
-- [ ] Eşzamanlılık sınırı, iptal, sıralı mod
-- [ ] Temel doğrulama: dosya var / boyut > 0 / checksum / `pg_restore --list` / `RESTORE VERIFYONLY` / SQL dosyası sonu kontrolü
+- [x] `core/backup_service.py`: tekil yedek akışı (seç → açıklama/etiket → yedekle → doğrula → kataloğa ekle)
+- [x] Toplu yedek: `batch_id`, **her DB için ayrı dosya + ayrı katalog kaydı**
+- [x] Bir alt işin hatası diğerlerini etkilemez; DB bazında başarı/başarısızlık raporu
+- [x] Eşzamanlılık sınırı, iptal, sıralı mod
+- [x] Temel doğrulama: dosya var / boyut > 0 / checksum / `pg_restore --list` / `RESTORE VERIFYONLY` / SQL dosyası sonu kontrolü
 
 ### UI **(MVP)**
-- [ ] Yeni Yedek ekranı: tekil/toplu seçim, klasör, açıklama, etiket, seçenekler
-- [ ] `ui/backups_page.py` — Yedek Arşivi: arama, filtre (tarih/DB/sunucu/motor/etiket), boyut, durum, doğrula
-- [ ] Toplu iş sonuç raporu
-- [ ] İş Geçmişi ekranı: devam eden/biten işler, hata ve günlükler
+- [x] Yeni Yedek ekranı: tekil/toplu seçim, klasör, açıklama, etiket, seçenekler
+- [x] `ui/archive_page.py` — Yedek Arşivi: arama, filtre (tarih/DB/sunucu/motor/etiket), boyut, durum, doğrula
+- [x] Toplu iş sonuç raporu
+- [x] İş Geçmişi ekranı: devam eden/biten işler, hata ve günlükler
 
 **Aşama 2 çıktısı:** Ayrı dosyalarla güvenilir yedek arşivi.
 
 ## Aşama 3 — Geri yükleme
 
-- [ ] `core/restore_service.py` **(MVP)**
-- [ ] Ön kontroller: motor eşleşmesi, sürüm uyumu, format, hedef yetkileri, disk alanı **(MVP)**
-- [ ] Varsayılan hedef: **yeni veritabanı**; üzerine yazma varsayılan kapalı **(MVP)**
-- [ ] Üzerine yazma için açık risk onayı (DB adını yazarak onaylama gibi) **(MVP)**
-- [ ] İsteğe bağlı koruyucu ön-yedek **(MVP)**
-- [ ] **PostgreSQL:** `pg_restore` (hedef DB oluşturma, `--no-owner` seçenekleri) **(MVP)**
-- [ ] **MySQL:** `mysql` istemcisiyle kontrollü içe aktarma (`.sql.gz` akışla) **(MVP)**
-- [ ] **MSSQL:** `RESTORE DATABASE ... WITH MOVE` (dosya yolu eşlemesi, `RESTORE FILELISTONLY`) **(MVP)**
-- [ ] Geri yükleme sonrası doğrulama (bağlan, tablo sayısı, şema snapshot karşılaştırması) **(MVP)**
-- [ ] `ui/restore_dialog.py`: uyumluluk kontrolleri, hedef seçimi, risk onayı, ilerleme **(MVP)**
-- [ ] Sonuç ve hata günlükleri kataloğa **(MVP)**
+- [x] `core/restore_service.py` **(MVP)**
+- [x] Ön kontroller: motor eşleşmesi, sürüm uyumu, format, hedef yetkileri, disk alanı **(MVP)**
+- [x] Varsayılan hedef: **yeni veritabanı**; üzerine yazma varsayılan kapalı **(MVP)**
+- [x] Üzerine yazma için açık risk onayı (DB adını yazarak onaylama gibi) **(MVP)**
+- [x] İsteğe bağlı koruyucu ön-yedek **(MVP)**
+- [x] **PostgreSQL:** `pg_restore` (hedef DB oluşturma, `--no-owner` seçenekleri) **(MVP)**
+- [x] **MySQL:** `mysql` istemcisiyle kontrollü içe aktarma (`.sql.gz` akışla) **(MVP)**
+- [x] **MSSQL:** `RESTORE DATABASE ... WITH MOVE` (dosya yolu eşlemesi, `RESTORE FILELISTONLY`) **(MVP)**
+- [x] Geri yükleme sonrası doğrulama (bağlan, tablo sayısı, şema snapshot karşılaştırması) **(MVP)**
+- [x] `ui/restore_page.py`: uyumluluk kontrolleri, hedef seçimi, risk onayı, ilerleme **(MVP)**
+- [x] Sonuç ve hata günlükleri kataloğa **(MVP)**
 
 **Aşama 3 çıktısı:** Güvenli geri yükleme akışı.
 
 ## Aşama 4 — Şema karşılaştırma
 
-- [ ] Her adaptörde `inspect_schema` → normalize `SchemaSnapshot` **(MVP)**
-  - [ ] PostgreSQL: `information_schema` + `pg_catalog`
-  - [ ] MySQL: `information_schema`
-  - [ ] MSSQL: `sys.*` katalog görünümleri
-- [ ] `compare/schema_diff.py`: tablo/sütun ekle-sil, tip, null, default, PK/FK, indeks, view/trigger/routine farkları **(MVP)**
-- [ ] `core/compare_service.py`: **yedek ↔ canlı** (snapshot vs canlı inspect) **(MVP)**
-- [ ] **Yedek ↔ yedek** (iki snapshot) **(MVP)**
-- [ ] Snapshot yoksa kullanıcıya sınırlı analiz uyarısı
-- [ ] `ui/compare_page.py`: kaynak seçimi, kategori/nesne bazlı ağaç görünümü, fark detayı **(MVP)**
-- [ ] Rapor dışa aktarma: JSON / HTML / CSV
+- [x] Her adaptörde `inspect_schema` → normalize `SchemaSnapshot` **(MVP)**
+  - [x] PostgreSQL: `information_schema` + `pg_catalog`
+  - [x] MySQL: `information_schema`
+  - [x] MSSQL: `sys.*` katalog görünümleri
+- [x] `compare/schema_diff.py`: tablo/sütun ekle-sil, tip, null, default, PK/FK, indeks, view/trigger/routine farkları **(MVP)**
+- [x] `core/compare_service.py`: **yedek ↔ canlı** (snapshot vs canlı inspect) **(MVP)**
+- [x] **Yedek ↔ yedek** (iki snapshot) **(MVP)**
+- [x] Snapshot yoksa kullanıcıya sınırlı analiz uyarısı
+- [x] `ui/compare_page.py`: kaynak seçimi, kategori/nesne bazlı ağaç görünümü, fark detayı **(MVP)**
+- [x] Rapor dışa aktarma: JSON / HTML / CSV
 
 **Aşama 4 çıktısı:** Yedek–canlı / yedek–yedek şema farkları.
 
 ## Aşama 5 — İleri karşılaştırma (MVP sonrası)
 
-- [ ] İzole/geçici veritabanına otomatik geri yükleme ve temizlik
-- [ ] Tablo bazında kayıt sayısı karşılaştırması
-- [ ] Kontrol özeti (checksum) karşılaştırması
-- [ ] `compare/data_diff.py`: PK/benzersiz anahtar bazlı eklenen / silinen / değişen satırlar
-- [ ] Anahtarsız tablolar için sınırlı/özet analiz
-- [ ] Büyük tablolar için parçalı okuma, örnekleme, kullanıcı tanımlı kapsam
-- [ ] Hassas veri maskeleme ve dışa aktarma uyarısı
+- [x] İzole/geçici veritabanına otomatik geri yükleme ve temizlik
+- [x] Tablo bazında kayıt sayısı karşılaştırması
+- [x] Kontrol özeti karşılaştırması (anahtarsız tablolar için sıradan bağımsız parmak izi)
+- [x] `compare/data_diff.py`: birincil anahtar bazlı eklenen / silinen / değişen satırlar (benzersiz indeksler henüz kullanılmıyor)
+- [x] Anahtarsız tablolar için sınırlı/özet analiz
+- [x] Büyük tablolar için parçalı okuma (sunucu tarafı imleç / `fetchmany`), tablo seçimi ve yalnızca-sayım modu (satır örneklemesi yok)
+- [x] Hassas veri: örnek satırlar arayüzde gösterilmez, rapora yalnızca açık onayla eklenir
 
 **Aşama 5 çıktısı:** Veri fark analizi.
 
 ## Aşama 6 — Dağıtım ve kalite
 
 ### Test
-- [ ] Birim testleri: servisler, katalog, manifest, diff motoru, adaptörler (mock'lu) **(MVP)**
-- [ ] `docker-compose` ile MSSQL / MySQL / PostgreSQL test ortamı **(MVP)**
-- [ ] Entegrasyon: yedekle → doğrula → geri yükle → şema karşılaştır döngüsü (her motor) **(MVP)**
-- [ ] Sürüm matrisi testleri (birden fazla motor sürümü)
-- [ ] UI testleri (`pytest-qt`)
+- [x] Birim testleri: servisler, katalog, manifest, diff motoru, adaptörler (mock'lu) **(MVP)**
+- [x] `docker-compose` ile MSSQL / MySQL / PostgreSQL test ortamı **(MVP)**
+- [x] Entegrasyon: yedekle → doğrula → geri yükle → şema karşılaştır döngüsü (her motor) **(MVP)**
+- [x] Sürüm matrisi testleri (birden fazla motor sürümü)
+- [x] UI testleri (`pytest-qt`)
 
 ### Paketleme
-- [ ] Windows paketi (installer / exe)
-- [ ] macOS paketi (`.app`, imzalama/notarization)
-- [ ] Linux paketi (AppImage veya benzeri)
-- [ ] CI'da üç platform için otomatik build
-- [ ] Kurulum dokümantasyonu: harici araçların her platformda kurulumu
+- [x] Windows paketi (PyInstaller, `.zip`) — CI'da derlenir
+- [ ] macOS paketi: `.app` CI'da derlenir; **imzalama/notarization yapılmadı** (Apple geliştirici sertifikası gerekir)
+- [x] Linux paketi (PyInstaller, `.tar.gz`; derleme ve açılış bu ortamda doğrulandı)
+- [x] CI'da üç platform için otomatik build (`.github/workflows/release.yml`)
+- [x] Kurulum dokümantasyonu: harici araçların her platformda kurulumu
 
 ### Diğer
-- [ ] Genel Bakış ekranı: son yedekler, başarısız işler, kullanılan alan
-- [ ] Ayarlar ekranı: araç yolları, saklama politikası, disk doluluk uyarısı, eşzamanlılık
-- [ ] Yedek silme öncesi onay mekanizması
-- [ ] `docs/architecture.md`
+- [x] Genel Bakış ekranı: son yedekler, başarısız işler, kullanılan alan
+- [x] Ayarlar ekranı: araç yolları, saklama politikası, disk doluluk uyarısı, eşzamanlılık
+- [x] Yedek silme öncesi onay mekanizması
+- [x] `docs/architecture.md`
 
 **Aşama 6 çıktısı:** Dağıtıma hazır sürüm.
 
@@ -168,18 +170,18 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 
 ## Kabul kriterleri (MVP)
 
-- [ ] Windows, macOS ve Linux üzerinde arayüz açılabiliyor
-- [ ] MSSQL, MySQL ve PostgreSQL bağlantıları ayrı ayrı test edilebiliyor
-- [ ] Tek veritabanı yedeği alınabiliyor ve arşivde görünüyor
-- [ ] Seçilen en az iki veritabanı topluca yedekleniyor ve **iki ayrı yedek dosyası** üretiliyor
-- [ ] Her yedeğin gerçek tarihi, açıklaması, kimliği ve SHA-256 bilgisi kaydediliyor
-- [ ] Yedeğin bozulduğu veya eksik olduğu anlaşılabiliyor
-- [ ] Uyumlu bir hedefe geri yükleme test ortamında başarıyla tamamlanıyor
-- [ ] Var olan veritabanının üzerine yazmadan önce açık onay alınıyor
-- [ ] Şema anlık görüntüsü bulunan yedek ile canlı veritabanının şema farkları gösteriliyor
-- [ ] Şema anlık görüntüsü bulunan iki yedeğin şema farkları gösteriliyor
-- [ ] Başarısız bir toplu yedekleme alt işi, diğer yedeklerin durumunu gizlemiyor
-- [ ] Parolalar uygulama kataloğunda veya günlüklerde düz metin bulunmuyor
+- [ ] Windows, macOS ve Linux üzerinde arayüz açılabiliyor — Linux'ta doğrulandı; Windows/macOS CI birim testleriyle (pytest-qt, offscreen) doğrulanacak
+- [x] MSSQL, MySQL ve PostgreSQL bağlantıları ayrı ayrı test edilebiliyor
+- [x] Tek veritabanı yedeği alınabiliyor ve arşivde görünüyor
+- [x] Seçilen en az iki veritabanı topluca yedekleniyor ve **iki ayrı yedek dosyası** üretiliyor
+- [x] Her yedeğin gerçek tarihi, açıklaması, kimliği ve SHA-256 bilgisi kaydediliyor
+- [x] Yedeğin bozulduğu veya eksik olduğu anlaşılabiliyor
+- [x] Uyumlu bir hedefe geri yükleme test ortamında başarıyla tamamlanıyor
+- [x] Var olan veritabanının üzerine yazmadan önce açık onay alınıyor
+- [x] Şema anlık görüntüsü bulunan yedek ile canlı veritabanının şema farkları gösteriliyor
+- [x] Şema anlık görüntüsü bulunan iki yedeğin şema farkları gösteriliyor
+- [x] Başarısız bir toplu yedekleme alt işi, diğer yedeklerin durumunu gizlemiyor
+- [x] Parolalar uygulama kataloğunda veya günlüklerde düz metin bulunmuyor
 
 ---
 

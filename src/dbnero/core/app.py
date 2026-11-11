@@ -12,7 +12,7 @@ from dbnero.core.connection_service import ConnectionService
 from dbnero.core.jobs import JobManager
 from dbnero.core.restore_service import RestoreService
 from dbnero.core.settings import Settings, save_settings
-from dbnero.security.credentials import CredentialStore, KeyringCredentialStore
+from dbnero.security.credentials import CredentialStore, SessionFallbackCredentialStore
 from dbnero.storage.catalog import Catalog
 
 
@@ -38,7 +38,7 @@ class AppContext:
         settings_path: Path | None = None,
     ) -> AppContext:
         catalog = catalog or Catalog(settings.resolved_catalog_path())
-        credentials = credentials or KeyringCredentialStore()
+        credentials = credentials or SessionFallbackCredentialStore()
         connections = ConnectionService(catalog, credentials, settings)
         backups = BackupService(catalog, connections, settings)
         jobs = JobManager(catalog, max_workers=max(2, settings.max_parallel_jobs))

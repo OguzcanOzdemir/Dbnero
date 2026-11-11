@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
@@ -200,6 +201,8 @@ class ComparePage(QWidget):
         self.samples.setRange(0, 1000)
         self.samples.setValue(20)
         self.scratch = QComboBox()
+        self.tables = QLineEdit()
+        self.tables.setPlaceholderText("Tablolar (boş = tümü), ör. public.orders, public.customers")
         self.include_data.toggled.connect(self._apply_mode)
         opts.addWidget(self.include_data)
         opts.addWidget(self.count_only)
@@ -209,6 +212,7 @@ class ComparePage(QWidget):
         opts.addWidget(self.scratch_label)
         opts.addWidget(self.scratch, 1)
         layout.addLayout(opts)
+        layout.addWidget(self.tables)
 
         run = QHBoxLayout()
         self.btn_run = QPushButton("Karşılaştır")
@@ -282,6 +286,7 @@ class ComparePage(QWidget):
         self.scratch_label.setVisible(needs_scratch)
         self.count_only.setEnabled(self.include_data.isChecked())
         self.samples.setEnabled(self.include_data.isChecked())
+        self.tables.setVisible(self.include_data.isChecked())
         self.left._load_databases()
         self.right._load_databases()
 
@@ -310,8 +315,11 @@ class ComparePage(QWidget):
     def run(self) -> None:
         mode = self.mode()
         include_data = self.include_data.isChecked()
+        wanted = [t.strip() for t in self.tables.text().split(",") if t.strip()]
         data_opts = DataDiffOptions(
-            count_only=self.count_only.isChecked(), max_samples=self.samples.value()
+            tables=wanted or None,
+            count_only=self.count_only.isChecked(),
+            max_samples=self.samples.value(),
         )
         scratch = self.scratch.currentData()
         left_backup = self.left.backup.currentData()

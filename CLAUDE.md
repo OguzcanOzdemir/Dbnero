@@ -110,7 +110,7 @@ Zamanlar UTC saklanır, arayüzde kullanıcının yerel saat diliminde gösteril
 pip install -e ".[dev]"     # geliştirme bağımlılıkları
 python -m dbnero            # uygulamayı başlat
 pytest tests/unit           # birim testleri (hızlı, harici DB gerektirmez)
-pytest tests/integration    # Docker'daki gerçek MSSQL/MySQL/PostgreSQL ile
+pytest tests/integration    # Docker'daki gerçek MSSQL/MySQL/PostgreSQL ile (önce: mkdir -p .mssql-share && chmod 777 .mssql-share && docker compose -f docker-compose.test.yml up -d --wait)
 ruff check . && ruff format --check .
 mypy src
 ```
@@ -131,18 +131,39 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 | Konu | Dosya |
 |---|---|
 | Domain modelleri, enum'lar | `src/dbnero/core/models.py` |
+| Servislerin kurulumu (composition root) | `src/dbnero/core/app.py` (`AppContext`) |
+| Bağlantılar, araç kontrolü, kurulum ipuçları | `src/dbnero/core/connection_service.py` |
+| Tekil/toplu yedek, doğrulama, silme, saklama politikası | `src/dbnero/core/backup_service.py` |
+| Geri yükleme (ön kontrol, onay, koruyucu yedek, doğrulama) | `src/dbnero/core/restore_service.py` |
+| Şema/veri karşılaştırma, izole geçici restore | `src/dbnero/core/compare_service.py` |
+| Arka plan işleri (iptal, ilerleme, kalıcı log) | `src/dbnero/core/jobs.py` |
+| Genel bakış istatistikleri, arşivden içe aktarma | `src/dbnero/core/catalog_service.py` |
 | Ayarlar (platformdirs, JSON) | `src/dbnero/core/settings.py` |
 | Loglama + parola maskeleme | `src/dbnero/core/logging_setup.py` |
 | Katalog / migration | `src/dbnero/storage/catalog.py`, `storage/migrations.py` |
 | Arşiv yolları, atomik yazma, SHA-256 | `src/dbnero/storage/archive.py` |
 | Manifest okuma/yazma | `src/dbnero/storage/manifests.py` |
-| Katalogu arşivden yeniden kurma | `src/dbnero/core/catalog_service.py` |
 | Adaptör sözleşmesi, registry | `src/dbnero/adapters/base.py` |
-| Alt süreç çalıştırma | `src/dbnero/adapters/process.py` |
+| Motor adaptörleri | `src/dbnero/adapters/{postgresql,mysql,mssql}.py` |
+| Alt süreç çalıştırma, gizli dosyalar | `src/dbnero/adapters/process.py` |
 | Araç keşfi | `src/dbnero/adapters/tools.py` |
-| Şema anlık görüntüsü modeli | `src/dbnero/compare/snapshots.py` |
-| Keyring | `src/dbnero/security/credentials.py` |
-| Ana pencere | `src/dbnero/ui/main_window.py` |
+| Şema modeli / şema diff / veri diff / rapor | `src/dbnero/compare/{snapshots,schema_diff,data_diff,report}.py` |
+| Keyring (+ oturumluk geri dönüş) | `src/dbnero/security/credentials.py` |
+| Ana pencere ve ekranlar | `src/dbnero/ui/main_window.py`, `ui/*_page.py` |
+| UI yardımcıları (`run_async`, `JobBridge`, biçimlendirme) | `src/dbnero/ui/common.py` |
+| Paketleme | `packaging/dbnero.spec`, `.github/workflows/release.yml` |
+| Test veritabanları | `docker-compose.test.yml`, `tests/integration/` |
+
+## UI kuralları
+
+- Ağ/disk işi yapan her çağrı UI thread'i dışında çalışır: kısa çağrılar `ui.common.run_async`, uzun işler `app.jobs.submit(...)` + `JobBridge.when_done`.
+- Qt combobox'ları `StrEnum` değerlerini düz `str` olarak döndürür; `currentData()` sonucunu her zaman `Engine(...)`, `AuthType(...)` vb. ile dönüştür.
+- Kullanıcıya görünen metinler Türkçe; servislerin ürettiği log/hata metinleri de Türkçe (kullanıcı görür), kod içi istisna mesajları adaptörlerde İngilizce olabilir.
+- Testler sahte adaptörle (`tests/unit/fakes.py`, `tests/unit/conftest.py::world`) çalışır; yeni ekran davranışı için `tests/unit/test_main_window.py`'ye test ekle.
+
+## Parolalar
+
+`AppContext` varsayılan olarak `SessionFallbackCredentialStore` kullanır: OS anahtar kasası varsa oraya yazar; yoksa parolayı **yalnızca bellekte, oturum boyunca** tutar ve `credential_store_available()` False döner (UI uyarı gösterir). Parolayı diske yazan bir geri dönüş ekleme.
 
 ## Kapsam dışı (MVP)
 

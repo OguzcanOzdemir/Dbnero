@@ -85,3 +85,49 @@ class InMemoryCredentialStore:
 
     def delete_password(self, connection_id: str) -> None:
         self._data.pop(connection_id, None)
+
+
+class SessionFallbackCredentialStore:
+    """Uses the OS keyring; if it is unavailable, keeps passwords in memory for
+    the current session only (never on disk) and reports ``persistent = False``
+    so the UI can tell the user."""
+
+    def __init__(self, primary: CredentialStore | None = None) -> None:
+        self._primary = primary or KeyringCredentialStore()
+        self._session = InMemoryCredentialStore()
+        self.persistent = True
+
+    def _fallback(self, exc: CredentialStoreUnavailable) -> None:
+        if self.persistent:
+            log.warning("Credential store unavailable, using session-only passwords: %s", exc)
+        self.persistent = False
+
+    def is_available(self) -> bool:
+        return self.persistent
+
+    def set_password(self, connection_id: str, password: str) -> None:
+        if self.persistent:
+            try:
+                self._primary.set_password(connection_id, password)
+                return
+            except CredentialStoreUnavailable as exc:
+                self._fallback(exc)
+        self._session.set_password(connection_id, password)
+
+    def get_password(self, connection_id: str) -> str | None:
+        value = self._session.get_password(connection_id)
+        if value is not None or not self.persistent:
+            return value
+        try:
+            return self._primary.get_password(connection_id)
+        except CredentialStoreUnavailable as exc:
+            self._fallback(exc)
+            return None
+
+    def delete_password(self, connection_id: str) -> None:
+        self._session.delete_password(connection_id)
+        if self.persistent:
+            try:
+                self._primary.delete_password(connection_id)
+            except CredentialStoreUnavailable as exc:
+                self._fallback(exc)

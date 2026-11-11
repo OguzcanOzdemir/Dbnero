@@ -1,21 +1,27 @@
 # Test databases for `pytest tests/integration`.
-#   docker compose -f docker-compose.test.yml up -d
+#   mkdir -p .mssql-share && chmod 777 .mssql-share
+#   docker compose -f docker-compose.test.yml up -d --wait
 # Credentials here are for throwaway local test containers only.
 services:
   postgres:
-    image: postgres:16
+    image: postgres:${PG_VERSION:-16}
     environment:
       POSTGRES_PASSWORD: Pg_Test_123
     ports: ["55432:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 60
 
   mysql:
-    image: mysql:8.4
+    image: mysql:${MYSQL_VERSION:-8.4}
     environment:
       MYSQL_ROOT_PASSWORD: My_Test_123
-      MYSQL_USER: dbnero
-      MYSQL_PASSWORD: My_Test_123
-    command: ["--log-bin-trust-function-creators=1"]
     ports: ["53306:3306"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pMy_Test_123"]
+      interval: 2s
+      retries: 90
 
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -25,5 +31,9 @@ services:
     ports: ["51433:1433"]
     volumes:
       # Shared backup directory: the server sees /var/opt/mssql/dbnero-share,
-      # tests see ./.mssql-share (set DBNERO_IT_MSSQL_LOCAL_DIR accordingly).
+      # the tests see ./.mssql-share (the default of DBNERO_IT_MSSQL_LOCAL_DIR).
       - ./.mssql-share:/var/opt/mssql/dbnero-share
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 3s
+      retries: 60

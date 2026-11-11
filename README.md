@@ -1,200 +1,149 @@
 # dbnero
 
-**Çoklu veritabanı yedekleme, geri yükleme ve karşılaştırma için masaüstü uygulaması.**
+**MSSQL, MySQL ve PostgreSQL için çapraz platform masaüstü yedekleme, geri yükleme ve karşılaştırma uygulaması.**
 
-dbnero, farklı veritabanı sunucularına bağlanıp tekil veya toplu yedek almayı, her yedeği ayrı bir dosyada saklamayı, yedekleri açıklama/etiket/tarih gibi meta verilerle arşivlemeyi, uygun yedekleri güvenli şekilde geri yüklemeyi ve veritabanları arasındaki **şema/veri farklarını** görüntülemeyi amaçlayan, çapraz platform bir masaüstü uygulamasıdır.
-
-> **Durum:** Planlama / erken geliştirme. Henüz çalışan bir sürüm yoktur. Görev listesi için [TASKS.md](TASKS.md) dosyasına bakın.
+dbnero farklı veritabanı sunucularına bağlanır; tekil veya toplu yedek alır, her veritabanını ayrı bir dosyaya yazar, yedekleri açıklama/etiket/tarih gibi meta verilerle arşivler, uygun yedekleri güvenli şekilde geri yükler ve yedekler ile canlı veritabanları arasındaki **şema ve veri farklarını** gösterir.
 
 | | |
 |---|---|
 | **Platformlar** | Windows, macOS, Linux |
-| **Dil** | Python 3.12+ |
-| **Arayüz** | PySide6 (Qt for Python) |
-| **Veritabanları** | Microsoft SQL Server, MySQL, PostgreSQL |
+| **Dil / arayüz** | Python 3.12+, PySide6 (Qt) |
+| **Veritabanları** | PostgreSQL 12+, MySQL 8.0+, SQL Server 2017+ |
+| **Lisans** | MIT |
+
+![Yedek arşivi](docs/screenshots/archive.png)
 
 ---
 
 ## Özellikler
 
-### Bağlantı yönetimi
-- MSSQL, MySQL ve PostgreSQL için bağlantı profilleri (oluştur / düzenle / sil)
-- Host, port, kullanıcı, kimlik doğrulama türü, TLS/SSL seçenekleri
-- **Bağlantıyı test et** ve sunucudaki veritabanlarını listeleme (sistem DB'leri ayrılır)
-- Parolalar düz metin yerine **işletim sistemi anahtar kasasında** (`keyring`) saklanır
-- Motor sürümü ve gerekli yedekleme araçlarının (`pg_dump`, `mysqldump` vb.) kontrolü
+**Bağlantılar**
+- MSSQL, MySQL ve PostgreSQL için bağlantı profilleri; TLS/SSL seçenekleri, SQL Server için Windows kimlik doğrulaması
+- Bağlantı testi, veritabanı keşfi (sistem veritabanları ayrı gösterilir), sunucu sürümü tespiti
+- Parolalar işletim sisteminin anahtar kasasında (`keyring`) tutulur. Kasa yoksa parolalar yalnızca oturum boyunca bellekte kalır. Kataloğa, manifest'e, loglara veya komut satırı argümanlarına **hiçbir zaman** yazılmaz.
 
-### Yedekleme
-- **Tekil yedek:** bağlantı + veritabanı seç → açıklama/etiket gir → yedekle → doğrula → kataloğa ekle
-- **Toplu yedek:** bir sunucudan birden fazla veritabanı seç → **her veritabanı için ayrı dosya ve ayrı katalog kaydı**
-- Toplu işlerde veritabanı bazında başarı/başarısızlık raporu; bir hata diğer yedekleri geçersiz kılmaz
-- Eşzamanlılık sınırı, iptal desteği, sıralı işleme seçeneği
-- SHA-256 bütünlük özeti, taşınabilir `manifest.json`
+**Yedekleme**
+- Tekil ve toplu yedek: **her veritabanı ayrı dosya + ayrı katalog kaydı**. Bir veritabanının hatası diğerlerini etkilemez.
+- Açıklama, etiketler, isteğe bağlı referans tarihi. Gerçek oluşturma zamanı UTC olarak kaydedilir ve değiştirilemez.
+- Yedek önce `.partial` dosyasına yazılır, SHA-256 hesaplandıktan sonra atomik olarak son adına taşınır.
+- Yedek anında **şema anlık görüntüsü** alınır; yedeğin yanına taşınabilir bir `manifest.json` yazılır.
+- Disk alanı kontrolü, eşzamanlılık sınırı, ilerleme göstergesi ve iptal.
 
-Örnek dosya adı: `2026-11-11_204000_postgres_crm_<id>.dump`
+**Arşiv**
+- Tarih, motor, durum, etiket ve metne göre arama/filtreleme
+- Yeniden doğrulama: boyut, SHA-256 ve motora özgü derin kontrol
+- Meta veri düzenleme, onaylı silme, arşivi manifest dosyalarından kataloğa yeniden aktarma
+- Onaylı saklama politikası: son N yedek ve/veya en fazla yaş. Her veritabanının en yeni başarılı yedeği her zaman korunur.
 
-### Geri yükleme
-- Yedek seç → hedef seç → ön kontrol (motor, sürüm, format, disk, yetki) → **açık onay** → geri yükle → doğrula
-- Var olan veritabanının üzerine yazma **varsayılan olarak kapalıdır**
-- Yeni/geçici veritabanına geri yükleme önerilir; isteğe bağlı koruyucu ön-yedek
-- Geri yükleme yalnızca **aynı motor içinde** desteklenir (ör. PostgreSQL → PostgreSQL)
+**Geri yükleme**
+- Ön kontroller: motor eşleşmesi, sürüm uyumu, SHA-256, hedefin varlığı, gerekli araçlar
+- Varsayılan hedef **yeni bir veritabanıdır**. Var olanın üzerine yazmak için kutucuğu işaretlemek **ve veritabanı adını yazmak** gerekir.
+- Üzerine yazmadan önce isteğe bağlı koruyucu yedek
+- Geri yükleme sonrası şema, yedeğin anlık görüntüsüyle karşılaştırılarak doğrulanır.
 
-### Karşılaştırma
-- **Yedek ↔ canlı veritabanı** ve **yedek ↔ yedek**
-- Şema farkları: tablolar, sütunlar, tipler, null/varsayılan, PK/FK, indeksler, view/trigger/procedure
-- Veri farkları (MVP sonrası): kayıt sayıları, anahtar bazlı eklenen/silinen/değişen satırlar
-- HTML / JSON / CSV rapor dışa aktarma (hassas veri uyarısıyla)
+**Karşılaştırma**
+- Yedek ↔ canlı, yedek ↔ yedek, canlı ↔ canlı
+- Şema farkları: tablolar, sütunlar (tip/null/varsayılan), birincil/yabancı anahtarlar, indeksler, view/trigger/procedure/function
+- Veri farkları: yedek geçici bir veritabanına geri yüklenir ve iş bitince silinir. Birincil anahtarlı tablolarda eklenen, silinen ve değişen satırlar; anahtarsız tablolarda parmak izi karşılaştırması yapılır.
+- HTML / JSON / CSV rapor. Örnek satır verileri yalnızca açık onayla rapora eklenir.
+
+**Diğer**
+- Genel bakış panosu (son yedekler, başarısız işler, arşiv boyutu, disk doluluğu)
+- İş geçmişi ve kalıcı iş günlükleri
+- İlk çalıştırmada araç/sürücü/parola kasası kontrolü ve platforma özel kurulum talimatı
+
+| Genel bakış | Geri yükleme | Karşılaştırma |
+|---|---|---|
+| ![](docs/screenshots/overview.png) | ![](docs/screenshots/restore.png) | ![](docs/screenshots/compare-data.png) |
 
 ---
 
-## Motorlara göre yöntemler
+## Kurulum
 
-| Motor | Yedek | Geri yükleme | Not |
-|---|---|---|---|
-| PostgreSQL | `pg_dump --format=custom` → `.dump` | `pg_restore` | Roller ve global nesneler DB yedeğine dahil değildir |
-| MySQL | `mysqldump` → `.sql` / `.sql.gz` | `mysql` istemcisi | InnoDB için `--single-transaction` |
-| MSSQL | `BACKUP DATABASE` → `.bak` | `RESTORE DATABASE` (+ `MOVE`) | `.bak` **sunucunun** dosya sistemine yazılır |
+### Hazır paket
+
+[Actions → Build packages](../../actions/workflows/release.yml) iş akışı Windows (`.zip`), macOS (`.app`, imzasız) ve Linux (`.tar.gz`) paketleri üretir. Bir `v*` etiketi gönderildiğinde veya iş akışı elle çalıştırıldığında derlenir.
+
+### Kaynaktan
+
+```bash
+git clone https://github.com/OguzcanOzdemir/Dbnero.git
+cd Dbnero
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[all]"            # tüm veritabanı sürücüleri
+python -m dbnero                   # veya: dbnero
+```
+
+Yalnızca belirli motorlar için: `pip install -e ".[postgresql]"`, `".[mysql]"`, `".[mssql]"`.
+
+### Harici araçlar
+
+dbnero motorların kendi araçlarını kullanır; bu araçlar uygulamayla birlikte gelmez:
+
+| Motor | Gerekli | Örnek kurulum |
+|---|---|---|
+| PostgreSQL | `pg_dump`, `pg_restore` (sunucu sürümüne eşit veya daha yeni) | `apt install postgresql-client` · `brew install libpq` |
+| MySQL | `mysqldump`, `mysql` | `apt install mysql-client` · `brew install mysql-client` |
+| SQL Server | Microsoft ODBC Driver 17/18 | [Microsoft belgeleri](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) |
+
+Araçlar PATH'te değilse yollarını **Ayarlar** ekranından gösterin. Ayrıntılar ve sınırlamalar: [docs/backup-compatibility.md](docs/backup-compatibility.md).
+
+### SQL Server notu
+
+`BACKUP DATABASE` dosyayı SQL Server'ın kendi diskine yazar. Bağlantıda **Sunucu yedek klasörü** (sunucunun gördüğü yol) ve **Yerel erişim yolu** (aynı klasörün bu bilgisayardaki paylaşım yolu) tanımlanırsa yedek arşive kopyalanır ve geri yükleme bu yolla yapılır. Paylaşım yoksa dosya T-SQL `OPENROWSET` ile aktarılır.
+
+---
+
+## Arşiv düzeni
+
+```
+<arşiv>/<motor>/<sunucu>/<veritabanı>/<yıl>/<ay>/
+    2026-11-11_204000_postgresql_crm_7b9cde3d.dump
+    2026-11-11_204000_postgresql_crm_7b9cde3d.manifest.json
+    2026-11-11_204000_postgresql_crm_7b9cde3d.schema.json
+```
+
+Varsayılan arşiv ve katalog konumu işletim sisteminin kullanıcı veri klasörüdür (ör. Linux'ta `~/.local/share/dbnero`). Arşiv klasörü Ayarlar ekranından değiştirilebilir. Katalog kaybolursa **Yedek Arşivi → Arşivden içe aktar** manifest dosyalarından kayıtları geri yükler.
 
 ---
 
 ## Mimari
 
 ```
-┌─────────────────────────────────────┐
-│          PySide6 Desktop UI         │
-│ Bağlantılar / Yedekler / Diff / Jobs│
-└──────────────────┬──────────────────┘
-                   ▼
-┌─────────────────────────────────────┐
-│        Application Services         │
-│  BackupService / RestoreService     │
-│  CompareService / CatalogService    │
-└─────────┬─────────────────┬─────────┘
-          ▼                 ▼
-┌──────────────────┐ ┌──────────────────┐
-│ Engine Adapters  │ │  Storage Layer   │
-│ - MSSQL          │ │ - SQLite catalog │
-│ - MySQL          │ │ - Local archive  │
-│ - PostgreSQL     │ │ - Manifest files │
-└──────────────────┘ └──────────────────┘
+ui/ (PySide6)  ──►  core/ (servisler, iş yöneticisi)  ──►  adapters/ (PostgreSQL, MySQL, MSSQL)
+                                                     ├──►  storage/ (SQLite katalog, arşiv, manifest)
+                                                     └──►  compare/ (şema/veri diff, raporlar)
 ```
 
-Motor bağımlı işler `DatabaseAdapter` protokolünü uygulayan adaptörlerde; karşılaştırma ise normalize edilmiş bir iç şema modeli üzerinde çalışan `SchemaDiffEngine` / `DataDiffEngine` ile yapılır.
-
-### Arşiv düzeni
-
-```
-arşiv/<motor>/<sunucu>/<veritabanı>/<yıl>/<ay>/
-    2026-11-11_204000_postgres_crm_<id>.dump
-    2026-11-11_204000_postgres_crm_<id>.manifest.json
-```
+Ayrıntılar: [docs/architecture.md](docs/architecture.md). Geliştirme kuralları: [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## Teknoloji yığını
-
-| Katman | Teknoloji |
-|---|---|
-| Masaüstü arayüz | PySide6 |
-| Yerel katalog | SQLite + SQLAlchemy |
-| Kimlik bilgileri | `keyring` |
-| MSSQL | `pyodbc` (+ Microsoft ODBC Driver) |
-| MySQL | `mysql-connector-python` |
-| PostgreSQL | `psycopg` |
-| İş yürütme | `QThreadPool` / iş kuyruğu |
-| Paketleme | PyInstaller veya Nuitka |
-| Test | `pytest` + geçici test veritabanları (Docker) |
-
----
-
-## Gereksinimler
-
-- Python **3.12+**
-- Kullanılacak motorlara göre harici araçlar (uygulama ile birlikte gelmez):
-  - PostgreSQL: `pg_dump`, `pg_restore` (sunucu sürümüyle uyumlu)
-  - MySQL: `mysqldump`, `mysql`
-  - MSSQL: [Microsoft ODBC Driver for SQL Server](https://learn.microsoft.com/sql/connect/odbc/microsoft-odbc-driver-for-sql-server) (17 veya 18)
-
-İlk çalıştırma sihirbazı bu araçları kontrol edecek ve eksikler için kurulum talimatı gösterecektir.
-
----
-
-## Geliştirme ortamı (planlanan)
+## Geliştirme
 
 ```bash
-git clone https://github.com/OguzcanOzdemir/Dbnero.git
-cd Dbnero
+pip install -e ".[dev,all]"
+ruff check . && ruff format --check . && mypy
+pytest tests/unit                      # hızlı, harici veritabanı gerekmez
 
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
-pip install -e ".[dev]"
-
-# Uygulamayı çalıştır
-python -m dbnero
-
-# Testler
-pytest tests/unit
-pytest tests/integration           # Docker ile test veritabanları gerekir
+# Entegrasyon testleri (gerçek PostgreSQL, MySQL, SQL Server)
+mkdir -p .mssql-share && chmod 777 .mssql-share
+docker compose -f docker-compose.test.yml up -d --wait
+pytest tests/integration
 ```
 
----
+Linux'ta Qt için `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3` gerekir. Başsız ortamda `QT_QPA_PLATFORM=offscreen` kullanın.
 
-## Proje dizini (planlanan)
-
-```
-dbnero/
-├── README.md
-├── CLAUDE.md
-├── TASKS.md
-├── pyproject.toml
-├── src/dbnero/
-│   ├── main.py
-│   ├── ui/          # main_window, connections_page, backups_page, restore_dialog, compare_page
-│   ├── core/        # backup_service, restore_service, compare_service, jobs, models
-│   ├── adapters/    # base, mssql, mysql, postgresql
-│   ├── compare/     # schema_diff, data_diff, snapshots
-│   ├── storage/     # catalog, manifests, archive
-│   └── security/    # credentials
-├── tests/
-│   ├── unit/
-│   └── integration/
-└── docs/
-    ├── architecture.md
-    └── backup-compatibility.md
-```
+Paket derleme: `pip install -e ".[all,packaging]" && pyinstaller packaging/dbnero.spec`
 
 ---
 
-## Yol haritası
+## Kapsam dışı
 
-| Aşama | İçerik | Çıktı |
-|---|---|---|
-| 1 — Temel altyapı | Proje iskeleti, adaptör sözleşmesi, SQLite katalog, güvenli parola saklama | Uygulama açılır, bağlantılar yönetilir |
-| 2 — Yedekleme | Üç motor için tekil/toplu yedek, dosya ve manifest yönetimi | Ayrı dosyalarla güvenilir yedek arşivi |
-| 3 — Geri yükleme | Uyumluluk kontrolleri, kontrollü restore, doğrulama, günlükler | Güvenli geri yükleme akışı |
-| 4 — Şema karşılaştırma | Normalize şema modeli ve diff ekranı | Yedek–canlı / yedek–yedek şema farkları |
-| 5 — İleri karşılaştırma | İzole restore, anahtar bazlı veri diff'i, raporlar | Veri fark analizi |
-| 6 — Dağıtım ve kalite | Üç platform paketi, kurulum kontrolleri, otomatik testler | Dağıtıma hazır sürüm |
+- Motorlar arası veri taşıma/dönüştürme
+- Zamanlanmış (otomatik) yedekleme ve bulut depolama
+- Şifreli arşiv, merkezi/ekip yönetimi
+- PostgreSQL global nesneleri, MySQL fiziksel yedek
 
-Ayrıntılı görev listesi: [TASKS.md](TASKS.md)
-
----
-
-## Kapsam dışı (ilk sürüm)
-
-- Motorlar arası veri taşıma / dönüştürme (ör. MSSQL → MySQL)
-- Büyük ölçekli, kesin satır bazında veri karşılaştırması
-- Otomatik zamanlanmış yedekleme, saklama kuralları ve bulut depolama
-- Şifreli arşiv (AES-GCM), merkezi yönetim ve ekip bazlı yetkilendirme
-- Farklı veritabanlarının aynı anda alınan yedekleri arasında küresel tutarlılık anı
-
----
-
-## Güvenlik ilkeleri
-
-- Parolalar yalnızca OS anahtar kasasında tutulur; **log, komut satırı argümanı ve manifest dosyalarına yazılmaz**
-- Mümkün olduğunda TLS ve sunucu sertifikası doğrulaması
-- Dinamik SQL'de nesne isimleri motora özgü şekilde doğrulanır ve kaçışlanır; değerler için parametre bağlama
-- SHA-256 checksum bütünlüğü gösterir, **tek başına başarılı geri yükleme garantisi değildir**
-- Yarım kalan yedekler tamamlanmış görünmez (geçici dosya + atomik sonlandırma)
+Yol haritası ve durum: [TASKS.md](TASKS.md).

@@ -51,3 +51,37 @@ def test_in_memory():
     assert s.get_password("a") == "b"
     s.delete_password("a")
     assert s.get_password("a") is None
+
+
+def test_session_fallback_when_keyring_unavailable():
+    from dbnero.security.credentials import (
+        CredentialStoreUnavailable,
+        SessionFallbackCredentialStore,
+    )
+
+    class Broken:
+        def set_password(self, *a):
+            raise CredentialStoreUnavailable("x")
+
+        def get_password(self, *a):
+            raise CredentialStoreUnavailable("x")
+
+        def delete_password(self, *a):
+            raise CredentialStoreUnavailable("x")
+
+    store = SessionFallbackCredentialStore(Broken())
+    assert store.get_password("a") is None
+    assert not store.is_available()
+    store.set_password("a", "pw")
+    assert store.get_password("a") == "pw"
+    store.delete_password("a")
+    assert store.get_password("a") is None
+
+
+def test_session_fallback_uses_primary(fake_keyring):
+    from dbnero.security.credentials import SessionFallbackCredentialStore
+
+    store = SessionFallbackCredentialStore()
+    store.set_password("a", "pw")
+    assert fake_keyring.data[("dbnero.connections", "a")] == "pw"
+    assert store.is_available() and store.get_password("a") == "pw"

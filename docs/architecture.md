@@ -47,3 +47,38 @@ Harici araçlar her zaman `adapters/process.run_tool` ile çalıştırılır:
 4. `manifest.json` yazılır; içinde sır yoktur, dosya adı göreli tutulur (arşiv taşınabilir).
 
 Katalog kaybolursa `CatalogService.import_from_archive` manifest'lerden kayıtları geri yükler.
+
+## Servisler ve işler
+
+`core/app.py` içindeki `AppContext` tüm servisleri kurar:
+
+| Servis | Görev |
+|---|---|
+| `ConnectionService` | Profil kaydı (parola keyring'e), adaptör oluşturma, bağlantı testi, araç kontrolü |
+| `BackupService` | Tekil/toplu yedek, disk kontrolü, şema görüntüsü, manifest, doğrulama, silme, saklama politikası |
+| `RestoreService` | Ön kontroller (`PreflightReport`), ad yazarak onay, koruyucu yedek, şema doğrulaması |
+| `CompareService` | Şema diff (snapshot/canlı), veri diff (canlı veya `dbnero_tmp_*` geçici restore) |
+| `CatalogService` | Genel bakış istatistikleri, yarım dosya temizliği, manifest'lerden içe aktarma |
+| `JobManager` | Thread pool'da iş çalıştırma, `JobContext` ile iptal/ilerleme, logların kataloğa yazılması, çökmeden kalan işlerin işaretlenmesi |
+
+Yedek akışı (`BackupService.backup_database`):
+
+1. Katalogda `running` kaydı açılır (gerçek `created_at_utc` burada atanır).
+2. Disk alanı kontrol edilir (veritabanı boyutu + ayarlanan rezerv).
+3. Şema anlık görüntüsü alınır (`*.schema.json`). Başarısız olursa uyarı yazılır, yedek devam eder.
+4. Adaptör `.partial` dosyasına yazar; SHA-256 hesaplanır; dosya atomik olarak son adına taşınır.
+5. Motorun derin doğrulaması çalışır: geçerse `succeeded`, geçmezse `unverified`.
+6. Manifest yazılır ve katalog güncellenir. Hata veya iptalde kayıt `failed`/`cancelled` olur, yarım dosyalar silinir.
+
+## Arayüz
+
+- `ui/main_window.py` sekiz ekranı (`*_page.py`) bir yan menüyle bağlar ve ekranlar arası geçişleri yönetir (Arşiv → Geri Yükle/Karşılaştır).
+- `ui/common.JobBridge`, `JobManager` olaylarını Qt sinyallerine çevirir (işçi thread → GUI thread).
+- `ui/common.run_async`, bağlantı testi gibi kısa çağrıları `QThreadPool` üzerinde çalıştırır.
+
+## Testler
+
+| Katman | Nerede | Not |
+|---|---|---|
+| Birim | `tests/unit` | Sahte adaptör (`fakes.py`) ile servisler ve UI (`pytest-qt`); adaptörlerde `run_tool` mock'lanır |
+| Entegrasyon | `tests/integration` | `docker-compose.test.yml` ile gerçek sunucular; CI'da PostgreSQL 14/16 ve MySQL 8.0/8.4 matrisi |

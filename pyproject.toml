@@ -7,6 +7,8 @@ name = "dbnero"
 version = "0.1.0.dev0"
 description = "Cross-platform desktop app for backing up, restoring and comparing MSSQL, MySQL and PostgreSQL databases."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "PySide6>=6.7",
@@ -20,6 +22,7 @@ postgresql = ["psycopg[binary]>=3.2"]
 mysql = ["mysql-connector-python>=9.0"]
 mssql = ["pyodbc>=5.1"]
 all = ["dbnero[postgresql,mysql,mssql]"]
+packaging = ["pyinstaller>=6.10"]
 dev = [
     "pytest>=8.0",
     "pytest-qt>=4.4",
