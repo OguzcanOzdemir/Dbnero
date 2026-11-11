@@ -267,6 +267,14 @@ class MSSQLAdapter:
         with self._connect() as conn:
             conn.cursor().execute(f"CREATE DATABASE {_quote(name)}")
 
+    def database_size_bytes(self, database: str) -> int | None:
+        value = self._scalar(
+            "SELECT SUM(CAST(size AS bigint)) * 8192 FROM sys.master_files "
+            "WHERE database_id = DB_ID(?) AND type = 0",
+            (database,),
+        )
+        return int(value) if value is not None else None
+
     def drop_database(self, name: str) -> None:
         if name in SYSTEM_DATABASES:
             raise AdapterError(f"Refusing to drop system database {name!r}")

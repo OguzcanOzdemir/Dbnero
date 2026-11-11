@@ -37,6 +37,15 @@ class Settings:
     tool_paths: dict[str, str] = field(default_factory=dict)
     max_parallel_jobs: int = 2
     first_run_completed: bool = False
+    # Refuse to start a backup when the archive volume would drop below this.
+    min_free_space_mb: int = 1024
+    # Warn on the overview page when the archive volume is fuller than this.
+    disk_warning_percent: int = 90
+    # Retention policy (0 = disabled). Applied only after explicit confirmation.
+    retention_keep_last: int = 0
+    retention_max_age_days: int = 0
+    # Default backup options per engine, e.g. {"mysql": {"compress": true}}.
+    backup_defaults: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def resolved_archive_root(self) -> Path:
         return Path(self.archive_root) if self.archive_root else data_dir() / "archive"

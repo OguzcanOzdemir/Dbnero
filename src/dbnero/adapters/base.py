@@ -99,6 +99,10 @@ class DatabaseAdapter(Protocol):
 
     def drop_database(self, name: str) -> None: ...
 
+    def database_size_bytes(self, database: str) -> int | None:
+        """Approximate on-disk size, used for free-space checks."""
+        ...
+
     def backup(
         self,
         database: str,

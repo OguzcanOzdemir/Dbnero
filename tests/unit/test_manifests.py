@@ -77,3 +77,17 @@ def test_rebuild_catalog_from_archive(tmp_path, catalog):
 
     again = svc.import_from_archive(tmp_path / "arch")
     assert again.imported == 0 and again.skipped_existing == 1
+
+
+def test_overview_stats(tmp_path, catalog):
+    from dbnero.core.catalog_service import CatalogService
+
+    rec, paths = _record(tmp_path / "arch")
+    catalog.add_backup(rec)
+    (paths.backup.parent / "x.dump.partial").write_bytes(b"x")
+    svc = CatalogService(catalog)
+    stats = svc.overview(tmp_path / "arch")
+    assert stats.total_backups == 1 and stats.succeeded == 1 and stats.archive_bytes == 3
+    assert len(stats.stale_partials) == 1 and 0 <= stats.disk_used_percent <= 100
+    assert svc.cleanup_stale_partials(tmp_path / "arch") == 1
+    assert svc.overview(tmp_path / "missing" / "dir").total_backups == 1

@@ -140,6 +140,11 @@ class PostgreSQLAdapter:
         with self._connect() as conn:
             conn.execute(f"CREATE DATABASE {_quote(name)}")
 
+    def database_size_bytes(self, database: str) -> int | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT pg_database_size(%s)", (database,)).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
     def drop_database(self, name: str) -> None:
         if name in SYSTEM_DATABASES or name == self._maintenance_db():
             raise AdapterError(f"Refusing to drop database {name!r}")

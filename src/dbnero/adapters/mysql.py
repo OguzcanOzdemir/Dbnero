@@ -186,6 +186,14 @@ class MySQLAdapter:
         m = re.match(r"(\d+)", version)
         return bool(m and int(m.group(1)) >= 8 and "MariaDB" not in version)
 
+    def database_size_bytes(self, database: str) -> int | None:
+        rows = self._query(
+            "SELECT SUM(DATA_LENGTH + INDEX_LENGTH) FROM information_schema.TABLES "
+            "WHERE TABLE_SCHEMA = %s",
+            (database,),
+        )
+        return int(rows[0][0]) if rows and rows[0][0] is not None else None
+
     def drop_database(self, name: str) -> None:
         if name in SYSTEM_DATABASES:
             raise AdapterError(f"Refusing to drop system database {name!r}")
