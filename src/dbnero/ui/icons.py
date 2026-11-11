@@ -7,6 +7,7 @@ follow the active theme without image assets.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
@@ -81,6 +82,10 @@ def icon(name: str, color: str, active_color: str | None = None, size: int = 20)
             result.addPixmap(pix, QIcon.Mode.Selected)
             result.addPixmap(pix, QIcon.Mode.Active)
     return result
+
+
+def app_icon_path() -> Path:
+    return Path(__file__).with_name("assets") / "dbnero.svg"
 
 
 def names() -> list[str]:

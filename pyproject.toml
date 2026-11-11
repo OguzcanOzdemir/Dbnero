@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dbnero"
-version = "0.1.0.dev0"
+dynamic = ["version"]
 description = "Cross-platform desktop app for backing up, restoring and comparing MSSQL, MySQL and PostgreSQL databases."
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,9 @@ dev = [
 
 [project.scripts]
 dbnero = "dbnero.main:main"
+
+[tool.hatch.version]
+path = "src/dbnero/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dbnero"]

@@ -30,6 +30,11 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setApplicationDisplayName(APP_NAME)
+    from PySide6.QtGui import QIcon
+
+    from dbnero.ui.icons import app_icon_path
+
+    app.setWindowIcon(QIcon(str(app_icon_path())))
     from dbnero.ui.theme import ThemeMode, apply_theme
 
     try:

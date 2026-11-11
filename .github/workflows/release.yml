@@ -1,5 +1,7 @@
-name: Build packages
+name: Release
 
+# Push a tag like v0.1.0 to build installers for every platform and publish
+# them as a GitHub Release. Run manually to build without publishing.
 on:
   workflow_dispatch:
   push:
@@ -13,30 +15,71 @@ jobs:
         include:
           - { os: windows-latest, name: windows-x64 }
           - { os: macos-latest, name: macos-arm64 }
-          - { os: ubuntu-22.04, name: linux-x64 }
+          - { os: macos-13, name: macos-x64 }
+          - { os: ubuntu-22.04, name: linux-x86_64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[all]" pyinstaller
+      - run: pip install -e ".[all,packaging]"
+      - name: Version
+        shell: bash
+        run: echo "VERSION=$(python -c 'import dbnero; print(dbnero.__version__)')" >> "$GITHUB_ENV"
       - run: pyinstaller --noconfirm packaging/dbnero.spec
-      - name: Smoke test (Linux)
+
+      - name: Windows installer and portable zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" packaging\windows\dbnero.iss
+          Compress-Archive -Path dist/dbnero -DestinationPath out/dbnero-windows-x64-portable.zip
+
+      - name: macOS disk image
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p out dmg
+          cp -R dist/dbnero.app dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname dbnero -srcfolder dmg -ov -format UDZO out/dbnero-${{ matrix.name }}.dmg
+
+      - name: Linux AppImage and tarball
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libfuse2
           QT_QPA_PLATFORM=offscreen timeout 10 ./dist/dbnero/dbnero --no-first-run || [ $? -eq 124 ]
-      - name: Archive (Windows)
-        if: runner.os == 'Windows'
-        run: Compress-Archive -Path dist/dbnero -DestinationPath dbnero-${{ matrix.name }}.zip
-      - name: Archive (macOS)
-        if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent dist/dbnero.app dbnero-${{ matrix.name }}.zip
-      - name: Archive (Linux)
-        if: runner.os == 'Linux'
-        run: tar -C dist -czf dbnero-${{ matrix.name }}.tar.gz dbnero
+          mkdir -p out
+          packaging/linux/build-appimage.sh out/dbnero-linux-x86_64.AppImage
+          tar -C dist -czf out/dbnero-linux-x86_64.tar.gz dbnero
+
       - uses: actions/upload-artifact@v4
         with:
           name: dbnero-${{ matrix.name }}
-          path: dbnero-${{ matrix.name }}.*
+          path: out/*
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Checksums
+        run: cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          body: |
+            Free download for Windows, macOS and Linux. See the [download page](https://oguzcanozdemir.github.io/Dbnero/) for which file to pick.
+
+            dbnero uses each database's own client tools (pg_dump, mysqldump, the SQL Server ODBC driver); install the ones you need. The app checks them on first start.
+
+            The builds are not code-signed yet: on Windows choose "More info → Run anyway", on macOS right-click the app and choose Open the first time.

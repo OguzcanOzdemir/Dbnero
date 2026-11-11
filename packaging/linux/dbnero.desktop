@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=dbnero
+Comment=Back up, restore and compare PostgreSQL, MySQL and SQL Server databases
+Exec=dbnero
+Icon=dbnero
+Categories=Development;Database;
+Terminal=false

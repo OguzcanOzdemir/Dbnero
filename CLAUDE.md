@@ -17,8 +17,8 @@ Görev listesi ve ilerleme: `TASKS.md`. Kullanıcıya yönelik açıklama: `READ
 ## Dil kuralları
 
 - Kod, değişken/fonksiyon/sınıf isimleri, docstring'ler ve kod yorumları: **İngilizce**
-- Kullanıcıya görünen arayüz metinleri: Türkçe (ileride i18n için `self.tr()` / Qt çeviri altyapısı kullanılmalı)
-- Dokümantasyon (`README.md`, `TASKS.md`, `docs/`): Türkçe
+- Kullanıcıya görünen arayüz metinleri ve servislerin ürettiği log/hata mesajları: **İngilizce** (uygulama tamamen İngilizce)
+- `README.md` ve `site/` (indirme sayfası): İngilizce. `TASKS.md`, `CLAUDE.md`, `docs/`: Türkçe
 - Commit mesajları: İngilizce, kısa ve emir kipinde (ör. `Add PostgreSQL backup adapter`)
 
 ## Mimari
@@ -151,19 +151,33 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 | Keyring (+ oturumluk geri dönüş) | `src/dbnero/security/credentials.py` |
 | Ana pencere ve ekranlar | `src/dbnero/ui/main_window.py`, `ui/*_page.py` |
 | UI yardımcıları (`run_async`, `JobBridge`, biçimlendirme) | `src/dbnero/ui/common.py` |
-| Paketleme | `packaging/dbnero.spec`, `.github/workflows/release.yml` |
+| Tema token'ları, stil sayfası | `src/dbnero/ui/theme.py` |
+| Çizilmiş ikonlar, uygulama ikonu | `src/dbnero/ui/icons.py`, `src/dbnero/ui/assets/dbnero.svg` |
+| Paketleme | `packaging/dbnero.spec`, `packaging/windows/dbnero.iss`, `packaging/linux/` |
+| Sürüm yayını (installer'lar + GitHub Release) | `.github/workflows/release.yml` (bir `v*` etiketi gönderince çalışır) |
+| İndirme sitesi (GitHub Pages) | `site/index.html`, `.github/workflows/pages.yml` |
 | Test veritabanları | `docker-compose.test.yml`, `tests/integration/` |
 
 ## UI kuralları
 
 - Ağ/disk işi yapan her çağrı UI thread'i dışında çalışır: kısa çağrılar `ui.common.run_async`, uzun işler `app.jobs.submit(...)` + `JobBridge.when_done`.
 - Qt combobox'ları `StrEnum` değerlerini düz `str` olarak döndürür; `currentData()` sonucunu her zaman `Engine(...)`, `AuthType(...)` vb. ile dönüştür.
-- Kullanıcıya görünen metinler Türkçe; servislerin ürettiği log/hata metinleri de Türkçe (kullanıcı görür), kod içi istisna mesajları adaptörlerde İngilizce olabilir.
+- Tüm kullanıcıya görünen metinler İngilizce, kısa ve eylem odaklı (ör. "Back up 2 databases", "Restore finished").
+- Renkler yalnızca `ui/theme.py` token'larından gelir; sayfalarda sabit renk yazma. Açık ve koyu tema ayrı tasarlanmıştır, ikisini de kontrol et.
+- Ortak bileşenleri kullan: `Page` (başlık + sağ üst eylemler `header_actions`), `Card`, `Banner`, `Collapsible` (gelişmiş seçenekler), `StatusDelegate` (durum rozeti), `JobProgress`, `button(text, kind)` (`primary` / `danger` / `ghost`).
+- Her sayfada tek bir birincil (primary) eylem olsun; nadir kullanılan ayarlar "Advanced options" altında gizli kalsın.
+- `QWidget.actions()` ile çakışmaması için sayfa başlığındaki buton düzeni `header_actions` adını kullanır.
 - Testler sahte adaptörle (`tests/unit/fakes.py`, `tests/unit/conftest.py::world`) çalışır; yeni ekran davranışı için `tests/unit/test_main_window.py`'ye test ekle.
 
 ## Parolalar
 
 `AppContext` varsayılan olarak `SessionFallbackCredentialStore` kullanır: OS anahtar kasası varsa oraya yazar; yoksa parolayı **yalnızca bellekte, oturum boyunca** tutar ve `credential_store_available()` False döner (UI uyarı gösterir). Parolayı diske yazan bir geri dönüş ekleme.
+
+## Sürüm yayınlama
+
+1. `src/dbnero/__init__.py` içindeki `__version__` değerini artır (pyproject sürümü buradan okunur).
+2. Commit'i gönder, ardından `vX.Y.Z` etiketini gönder. Release iş akışı Windows installer/portable, macOS `.dmg`, Linux AppImage/`.tar.gz` ve `SHA256SUMS.txt` dosyalarını yayınlar.
+3. İndirme bağlantıları sabit dosya adlarıyla `releases/latest/download/<dosya>` adresini kullanır; dosya adlarını değiştirirsen `site/index.html` ve `README.md`'yi de güncelle.
 
 ## Kapsam dışı (MVP)
 

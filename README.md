@@ -1,149 +1,117 @@
-# dbnero
+<p align="center"><img src="packaging/icons/dbnero.png" width="96" alt="dbnero logo"></p>
 
-**MSSQL, MySQL ve PostgreSQL için çapraz platform masaüstü yedekleme, geri yükleme ve karşılaştırma uygulaması.**
+<h1 align="center">dbnero</h1>
 
-dbnero farklı veritabanı sunucularına bağlanır; tekil veya toplu yedek alır, her veritabanını ayrı bir dosyaya yazar, yedekleri açıklama/etiket/tarih gibi meta verilerle arşivler, uygun yedekleri güvenli şekilde geri yükler ve yedekler ile canlı veritabanları arasındaki **şema ve veri farklarını** gösterir.
+<p align="center"><b>Back up, restore and compare PostgreSQL, MySQL and SQL Server databases.</b><br>
+Free desktop app for Windows, macOS and Linux.</p>
 
-| | |
+<p align="center">
+  <a href="https://oguzcanozdemir.github.io/Dbnero/"><b>Website</b></a> ·
+  <a href="https://github.com/OguzcanOzdemir/Dbnero/releases/latest"><b>Download</b></a> ·
+  <a href="docs/backup-compatibility.md">Compatibility</a>
+</p>
+
+![dbnero Backups page](docs/screenshots/backups-light.png)
+
+## Download
+
+| System | File |
 |---|---|
-| **Platformlar** | Windows, macOS, Linux |
-| **Dil / arayüz** | Python 3.12+, PySide6 (Qt) |
-| **Veritabanları** | PostgreSQL 12+, MySQL 8.0+, SQL Server 2017+ |
-| **Lisans** | MIT |
+| **Windows** 10/11, 64-bit | [Installer (.exe)](https://github.com/OguzcanOzdemir/Dbnero/releases/latest/download/dbnero-windows-x64-setup.exe) · [Portable (.zip)](https://github.com/OguzcanOzdemir/Dbnero/releases/latest/download/dbnero-windows-x64-portable.zip) |
+| **macOS** 11+, Apple Silicon | [Disk image (.dmg)](https://github.com/OguzcanOzdemir/Dbnero/releases/latest/download/dbnero-macos-arm64.dmg) |
+| **Linux** x86-64 | [AppImage](https://github.com/OguzcanOzdemir/Dbnero/releases/latest/download/dbnero-linux-x86_64.AppImage) · [Archive (.tar.gz)](https://github.com/OguzcanOzdemir/Dbnero/releases/latest/download/dbnero-linux-x86_64.tar.gz) |
 
-![Yedek arşivi](docs/screenshots/archive.png)
+Checksums are in [`SHA256SUMS.txt`](https://github.com/OguzcanOzdemir/Dbnero/releases/latest/download/SHA256SUMS.txt) on every release.
 
----
+The builds are not code-signed yet:
+- **Windows:** if SmartScreen appears, choose *More info → Run anyway*.
+- **macOS:** right-click the app and choose *Open* the first time.
+- **Linux:** run `chmod +x` on the AppImage, then start it.
 
-## Özellikler
+### Database tools
 
-**Bağlantılar**
-- MSSQL, MySQL ve PostgreSQL için bağlantı profilleri; TLS/SSL seçenekleri, SQL Server için Windows kimlik doğrulaması
-- Bağlantı testi, veritabanı keşfi (sistem veritabanları ayrı gösterilir), sunucu sürümü tespiti
-- Parolalar işletim sisteminin anahtar kasasında (`keyring`) tutulur. Kasa yoksa parolalar yalnızca oturum boyunca bellekte kalır. Kataloğa, manifest'e, loglara veya komut satırı argümanlarına **hiçbir zaman** yazılmaz.
+dbnero drives each engine's own tools. They are not bundled; install the ones you need:
 
-**Yedekleme**
-- Tekil ve toplu yedek: **her veritabanı ayrı dosya + ayrı katalog kaydı**. Bir veritabanının hatası diğerlerini etkilemez.
-- Açıklama, etiketler, isteğe bağlı referans tarihi. Gerçek oluşturma zamanı UTC olarak kaydedilir ve değiştirilemez.
-- Yedek önce `.partial` dosyasına yazılır, SHA-256 hesaplandıktan sonra atomik olarak son adına taşınır.
-- Yedek anında **şema anlık görüntüsü** alınır; yedeğin yanına taşınabilir bir `manifest.json` yazılır.
-- Disk alanı kontrolü, eşzamanlılık sınırı, ilerleme göstergesi ve iptal.
-
-**Arşiv**
-- Tarih, motor, durum, etiket ve metne göre arama/filtreleme
-- Yeniden doğrulama: boyut, SHA-256 ve motora özgü derin kontrol
-- Meta veri düzenleme, onaylı silme, arşivi manifest dosyalarından kataloğa yeniden aktarma
-- Onaylı saklama politikası: son N yedek ve/veya en fazla yaş. Her veritabanının en yeni başarılı yedeği her zaman korunur.
-
-**Geri yükleme**
-- Ön kontroller: motor eşleşmesi, sürüm uyumu, SHA-256, hedefin varlığı, gerekli araçlar
-- Varsayılan hedef **yeni bir veritabanıdır**. Var olanın üzerine yazmak için kutucuğu işaretlemek **ve veritabanı adını yazmak** gerekir.
-- Üzerine yazmadan önce isteğe bağlı koruyucu yedek
-- Geri yükleme sonrası şema, yedeğin anlık görüntüsüyle karşılaştırılarak doğrulanır.
-
-**Karşılaştırma**
-- Yedek ↔ canlı, yedek ↔ yedek, canlı ↔ canlı
-- Şema farkları: tablolar, sütunlar (tip/null/varsayılan), birincil/yabancı anahtarlar, indeksler, view/trigger/procedure/function
-- Veri farkları: yedek geçici bir veritabanına geri yüklenir ve iş bitince silinir. Birincil anahtarlı tablolarda eklenen, silinen ve değişen satırlar; anahtarsız tablolarda parmak izi karşılaştırması yapılır.
-- HTML / JSON / CSV rapor. Örnek satır verileri yalnızca açık onayla rapora eklenir.
-
-**Diğer**
-- Genel bakış panosu (son yedekler, başarısız işler, arşiv boyutu, disk doluluğu)
-- İş geçmişi ve kalıcı iş günlükleri
-- İlk çalıştırmada araç/sürücü/parola kasası kontrolü ve platforma özel kurulum talimatı
-
-| Genel bakış | Geri yükleme | Karşılaştırma |
+| Engine | Needed | Example |
 |---|---|---|
-| ![](docs/screenshots/overview.png) | ![](docs/screenshots/restore.png) | ![](docs/screenshots/compare-data.png) |
-
----
-
-## Kurulum
-
-### Hazır paket
-
-[Actions → Build packages](../../actions/workflows/release.yml) iş akışı Windows (`.zip`), macOS (`.app`, imzasız) ve Linux (`.tar.gz`) paketleri üretir. Bir `v*` etiketi gönderildiğinde veya iş akışı elle çalıştırıldığında derlenir.
-
-### Kaynaktan
-
-```bash
-git clone https://github.com/OguzcanOzdemir/Dbnero.git
-cd Dbnero
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[all]"            # tüm veritabanı sürücüleri
-python -m dbnero                   # veya: dbnero
-```
-
-Yalnızca belirli motorlar için: `pip install -e ".[postgresql]"`, `".[mysql]"`, `".[mssql]"`.
-
-### Harici araçlar
-
-dbnero motorların kendi araçlarını kullanır; bu araçlar uygulamayla birlikte gelmez:
-
-| Motor | Gerekli | Örnek kurulum |
-|---|---|---|
-| PostgreSQL | `pg_dump`, `pg_restore` (sunucu sürümüne eşit veya daha yeni) | `apt install postgresql-client` · `brew install libpq` |
+| PostgreSQL | `pg_dump`, `pg_restore` (same version as the server or newer) | `apt install postgresql-client` · `brew install libpq` |
 | MySQL | `mysqldump`, `mysql` | `apt install mysql-client` · `brew install mysql-client` |
-| SQL Server | Microsoft ODBC Driver 17/18 | [Microsoft belgeleri](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) |
+| SQL Server | Microsoft ODBC Driver 18 | [Microsoft docs](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) |
 
-Araçlar PATH'te değilse yollarını **Ayarlar** ekranından gösterin. Ayrıntılar ve sınırlamalar: [docs/backup-compatibility.md](docs/backup-compatibility.md).
+The app checks for them on first start, and you can point to them in **Settings**.
 
-### SQL Server notu
+## What it does
 
-`BACKUP DATABASE` dosyayı SQL Server'ın kendi diskine yazar. Bağlantıda **Sunucu yedek klasörü** (sunucunun gördüğü yol) ve **Yerel erişim yolu** (aynı klasörün bu bilgisayardaki paylaşım yolu) tanımlanırsa yedek arşive kopyalanır ve geri yükleme bu yolla yapılır. Paylaşım yoksa dosya T-SQL `OPENROWSET` ile aktarılır.
+- **Back up** one database or many. Each database gets its own file and archive entry, and one failure never hides the others.
+- **Never half-written:** backups go to a temporary file, are verified with the engine's tools, then moved into place with a SHA-256 checksum, a schema snapshot and a `manifest.json`.
+- **Restore safely:** a new database by default. Replacing one requires typing its name, takes a safety backup first and compares the restored schema with the backup.
+- **Compare** a backup with a live database, two backups or two live databases. Schema differences cover tables, columns, keys, indexes, views, triggers and routines. Data differences are row-level by primary key, using a temporary restore.
+- **Reports** in HTML, JSON or CSV. Sample rows are included only if you agree.
+- **Passwords** stay in the system keychain, never in the catalog, logs or command lines.
+- **Portable archive:** plain files with manifests. If the catalog is lost, *Import from folder* rebuilds it.
+- **Light and dark themes** that follow your system.
 
----
+| Home | Restore | Compare |
+|---|---|---|
+| ![](docs/screenshots/home-dark.png) | ![](docs/screenshots/restore-light.png) | ![](docs/screenshots/compare-dark.png) |
 
-## Arşiv düzeni
+### Engines
+
+| Engine | Backup | Restore | File | Server versions |
+|---|---|---|---|---|
+| PostgreSQL | `pg_dump --format=custom` | `pg_restore` | `.dump` | 12+ |
+| MySQL | `mysqldump --single-transaction` | `mysql` | `.sql.gz` | 8.0+ |
+| SQL Server | `BACKUP DATABASE … WITH CHECKSUM` | `RESTORE DATABASE … WITH MOVE` | `.bak` | 2017+ |
+
+**SQL Server note:** `BACKUP DATABASE` writes to the server's own disk. Set *Server backup folder* and its *local path* (for example `\\server\Backups`) on the connection so backups can be copied into the archive and restored. Without a share, dbnero transfers the file through SQL (`OPENROWSET`).
+
+### Archive layout
 
 ```
-<arşiv>/<motor>/<sunucu>/<veritabanı>/<yıl>/<ay>/
+<archive>/<engine>/<server>/<database>/<year>/<month>/
     2026-11-11_204000_postgresql_crm_7b9cde3d.dump
     2026-11-11_204000_postgresql_crm_7b9cde3d.manifest.json
     2026-11-11_204000_postgresql_crm_7b9cde3d.schema.json
 ```
 
-Varsayılan arşiv ve katalog konumu işletim sisteminin kullanıcı veri klasörüdür (ör. Linux'ta `~/.local/share/dbnero`). Arşiv klasörü Ayarlar ekranından değiştirilebilir. Katalog kaybolursa **Yedek Arşivi → Arşivden içe aktar** manifest dosyalarından kayıtları geri yükler.
+## Run from source
 
----
-
-## Mimari
-
-```
-ui/ (PySide6)  ──►  core/ (servisler, iş yöneticisi)  ──►  adapters/ (PostgreSQL, MySQL, MSSQL)
-                                                     ├──►  storage/ (SQLite katalog, arşiv, manifest)
-                                                     └──►  compare/ (şema/veri diff, raporlar)
+```bash
+git clone https://github.com/OguzcanOzdemir/Dbnero.git
+cd Dbnero
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[all]"
+python -m dbnero
 ```
 
-Ayrıntılar: [docs/architecture.md](docs/architecture.md). Geliştirme kuralları: [CLAUDE.md](CLAUDE.md).
-
----
-
-## Geliştirme
+## Development
 
 ```bash
 pip install -e ".[dev,all]"
 ruff check . && ruff format --check . && mypy
-pytest tests/unit                      # hızlı, harici veritabanı gerekmez
+pytest tests/unit
 
-# Entegrasyon testleri (gerçek PostgreSQL, MySQL, SQL Server)
+# Integration tests against real PostgreSQL, MySQL and SQL Server
 mkdir -p .mssql-share && chmod 777 .mssql-share
 docker compose -f docker-compose.test.yml up -d --wait
 pytest tests/integration
 ```
 
-Linux'ta Qt için `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3` gerekir. Başsız ortamda `QT_QPA_PLATFORM=offscreen` kullanın.
+On Linux, Qt needs `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3`. For headless runs use `QT_QPA_PLATFORM=offscreen`.
 
-Paket derleme: `pip install -e ".[all,packaging]" && pyinstaller packaging/dbnero.spec`
+- **Build packages locally:** `pip install -e ".[all,packaging]" && pyinstaller packaging/dbnero.spec`
+- **Release:** push a tag such as `v0.1.0`. The [Release workflow](.github/workflows/release.yml) builds every installer and publishes a GitHub Release.
+- **Website:** the [Website workflow](.github/workflows/pages.yml) publishes `site/` to GitHub Pages.
 
----
+Architecture notes: [docs/architecture.md](docs/architecture.md) · Project rules: [CLAUDE.md](CLAUDE.md) · Roadmap: [TASKS.md](TASKS.md)
 
-## Kapsam dışı
+## Not included
 
-- Motorlar arası veri taşıma/dönüştürme
-- Zamanlanmış (otomatik) yedekleme ve bulut depolama
-- Şifreli arşiv, merkezi/ekip yönetimi
-- PostgreSQL global nesneleri, MySQL fiziksel yedek
+- Cross-engine migration (for example SQL Server → MySQL)
+- Scheduled backups and cloud storage
+- Encrypted archives, team or central management
+- PostgreSQL global objects, MySQL physical backups
 
-Yol haritası ve durum: [TASKS.md](TASKS.md).
+## License
+
+MIT
