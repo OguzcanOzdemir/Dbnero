@@ -330,10 +330,24 @@ class MSSQLAdapter:
                 )
             if ctx:
                 ctx.progress(None, "Copying backup from share")
-            shutil.copyfile(local_copy, destination)
+            try:
+                shutil.copyfile(local_copy, destination)
+            except PermissionError:
+                # The SQL Server service account may create the file with modes
+                # this user cannot read; fall back to streaming it over SQL.
+                warnings.append(
+                    f"No read permission on {local_copy}; transferred through SQL instead"
+                )
+                extra["transfer"] = "sql"
+                self._download_via_sql(server_path, destination, ctx)
             if not _bool_opt(self.profile.options.get("keep_server_copy"), False):
-                local_copy.unlink(missing_ok=True)
-                extra.pop("server_file_path")
+                try:
+                    local_copy.unlink()
+                    extra.pop("server_file_path")
+                except FileNotFoundError:
+                    extra.pop("server_file_path")
+                except PermissionError:
+                    warnings.append(f"Server-side copy could not be removed: {server_path}")
         else:
             self._download_via_sql(server_path, destination, ctx)
             warnings.append(f"Server-side copy kept at {server_path}")

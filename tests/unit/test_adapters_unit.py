@@ -212,3 +212,40 @@ def test_mssql_odbc_error_cleanup():
         + "Login failed for user 'sa'. (18456) (SQLDriverConnect)",
     )
     assert mssql_mod._odbc_error(exc) == "Login failed for user 'sa'. (18456)"
+
+
+def test_mssql_share_permission_error_falls_back_to_sql(monkeypatch, tmp_path):
+    share = tmp_path / "share"
+    share.mkdir()
+    profile = _profile(
+        Engine.MSSQL,
+        options={"server_backup_dir": "/srv/bak", "local_backup_dir": str(share)},
+    )
+    a = mssql_mod.MSSQLAdapter(profile, "pw")
+    a._platform = "Linux"
+    monkeypatch.setattr(a, "test_connection", lambda: "16.0")
+    monkeypatch.setattr(a, "_driver", lambda: "ODBC Driver 18 for SQL Server")
+
+    def fake_run(sql, ctx, label, database=None):
+        if sql.startswith("BACKUP"):
+            (share / "x.bak").write_bytes(b"TAPE....")
+        return []
+
+    monkeypatch.setattr(a, "_run_with_messages", fake_run)
+    downloaded = []
+
+    def fake_download(server_path, destination, ctx):
+        downloaded.append(server_path)
+        destination.write_bytes(b"TAPE....")
+
+    monkeypatch.setattr(a, "_download_via_sql", fake_download)
+
+    def denied(src, dst):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(mssql_mod.shutil, "copyfile", denied)
+    result = a.backup("crm", tmp_path / "x.bak.partial", {})
+    assert downloaded == ["/srv/bak/x.bak"]
+    assert result.extra["transfer"] == "sql"
+    assert any("No read permission" in w for w in result.warnings)
+    assert (tmp_path / "x.bak.partial").read_bytes().startswith(b"TAPE")
