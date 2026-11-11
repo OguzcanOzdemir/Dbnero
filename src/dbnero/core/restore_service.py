@@ -126,37 +126,39 @@ class RestoreService:
 
         # Backup file.
         if record.status not in {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}:
-            report.add(Severity.ERROR, f"Yedek durumu '{record.status.value}', geri yüklenemez")
+            report.add(
+                Severity.ERROR, f"Backup status is '{record.status.value}' and cannot be restored"
+            )
         elif record.status is BackupStatus.UNVERIFIED:
-            report.add(Severity.WARNING, "Yedek doğrulanamamış durumda")
+            report.add(Severity.WARNING, "The backup failed its last validation")
         if not record.file_path.is_file():
-            report.add(Severity.ERROR, f"Yedek dosyası bulunamadı: {record.file_path}")
+            report.add(Severity.ERROR, f"Backup file not found: {record.file_path}")
         elif verify_checksum and record.checksum_sha256:
             if sha256_file(record.file_path) != record.checksum_sha256:
-                report.add(Severity.ERROR, "SHA-256 uyuşmuyor: yedek dosyası bozulmuş")
+                report.add(Severity.ERROR, "SHA-256 mismatch: the backup file is corrupted")
             else:
-                report.add(Severity.OK, "Yedek dosyası ve SHA-256 özeti doğru")
+                report.add(Severity.OK, "Backup file present and SHA-256 matches")
 
         # Target connection and engine.
         try:
             profile = self.connections.get(target_connection_id)
         except LookupError:
-            report.add(Severity.ERROR, "Hedef bağlantı bulunamadı")
+            report.add(Severity.ERROR, "Target connection not found")
             return report
         if profile.engine is not record.engine:
             report.add(
                 Severity.ERROR,
-                f"Motor uyuşmuyor: yedek {record.engine.display_name}, hedef "
-                f"{profile.engine.display_name}. Motorlar arası geri yükleme desteklenmez.",
+                f"Engine mismatch: backup is {record.engine.display_name}, target is "
+                f"{profile.engine.display_name}. Cross-engine restore is not supported.",
             )
             return report
         if not target_database:
-            report.add(Severity.ERROR, "Hedef veritabanı adı boş olamaz")
+            report.add(Severity.ERROR, "Target database name is required")
             return report
 
         for tool in RESTORE_TOOLS[profile.engine]:
             if find_tool(tool, self.connections.settings.tool_paths.get(tool)) is None:
-                report.add(Severity.ERROR, f"Gerekli araç bulunamadı: {tool}")
+                report.add(Severity.ERROR, f"Required tool not found: {tool}")
 
         adapter = self.connections.adapter_for(profile)
         try:
@@ -164,27 +166,27 @@ class RestoreService:
             existing = adapter.list_databases(include_system=True)
             system = set(existing) - set(adapter.list_databases())
         except AdapterError as exc:
-            report.add(Severity.ERROR, f"Hedef sunucuya bağlanılamadı: {exc}")
+            report.add(Severity.ERROR, f"Cannot connect to the target server: {exc}")
             return report
-        report.add(Severity.OK, f"Hedef sunucu erişilebilir ({report.target_version})")
+        report.add(Severity.OK, f"Target server reachable ({report.target_version})")
 
         if target_database in system:
-            report.add(Severity.ERROR, "Sistem veritabanına geri yükleme yapılamaz")
+            report.add(Severity.ERROR, "Restoring into a system database is not allowed")
         report.target_exists = target_database in existing
         if report.target_exists and not overwrite:
             report.add(
                 Severity.ERROR,
-                f"'{target_database}' zaten var. Yeni bir ad seçin veya üzerine yazmayı "
-                "açıkça etkinleştirin.",
+                f"'{target_database}' already exists. Choose a new name or explicitly "
+                "allow overwriting.",
             )
         elif report.target_exists:
             report.add(
                 Severity.WARNING,
-                f"'{target_database}' SİLİNECEK ve yedekten yeniden oluşturulacak. "
-                "Bu işlem geri alınamaz.",
+                f"'{target_database}' will be DROPPED and recreated from the backup. "
+                "This cannot be undone.",
             )
         else:
-            report.add(Severity.OK, f"'{target_database}' yeni veritabanı olarak oluşturulacak")
+            report.add(Severity.OK, f"'{target_database}' will be created as a new database")
 
         self._version_checks(record, report)
 
@@ -193,8 +195,8 @@ class RestoreService:
 
         report.add(
             Severity.INFO,
-            "Geri yükleme bir transaction değildir; yarıda kalırsa hedef veritabanı "
-            "eksik kalabilir.",
+            "A restore is not a transaction; if it stops midway the target database "
+            "may be incomplete.",
         )
         return report
 
@@ -202,35 +204,37 @@ class RestoreService:
     def _version_checks(record: BackupRecord, report: PreflightReport) -> None:
         src, dst = _major(record.engine_version), _major(report.target_version)
         if src is None or dst is None:
-            report.add(Severity.WARNING, "Sürüm uyumluluğu belirlenemedi")
+            report.add(Severity.WARNING, "Could not determine version compatibility")
         elif dst < src:
             severity = Severity.ERROR if record.engine is Engine.MSSQL else Severity.WARNING
             report.add(
                 severity,
-                f"Yedek daha yeni bir sunucudan ({record.engine_version}) alınmış; hedef "
-                f"{report.target_version}. Daha eski sürüme geri yükleme "
-                + ("desteklenmez." if severity is Severity.ERROR else "sorun çıkarabilir."),
+                f"The backup comes from a newer server ({record.engine_version}); target is "
+                f"{report.target_version}. Restoring to an older version "
+                + ("is not supported." if severity is Severity.ERROR else "may fail."),
             )
         else:
-            report.add(Severity.OK, "Sunucu sürümü uyumlu")
+            report.add(Severity.OK, "Server version is compatible")
 
     @staticmethod
     def _mssql_checks(
         record: BackupRecord, options: dict[str, str], report: PreflightReport
     ) -> None:
         if options.get("local_backup_dir"):
-            report.add(Severity.OK, "Yedek, paylaşılan klasör üzerinden sunucuya kopyalanacak")
+            report.add(
+                Severity.OK, "The backup will be copied to the server through the shared folder"
+            )
         elif record.extra.get("server_file_path"):
             report.add(
                 Severity.WARNING,
-                "Paylaşılan klasör yok; sunucudaki kopya kullanılacak "
-                f"({record.extra['server_file_path']}), SHA-256 ile doğrulanacak",
+                "No shared folder; the server-side copy "
+                f"({record.extra['server_file_path']}) will be used after SHA-256 verification",
             )
         else:
             report.add(
                 Severity.ERROR,
-                "SQL Server dosyayı okuyamaz: hedef bağlantıda paylaşılan yedek klasörü "
-                "(server_backup_dir + local_backup_dir) tanımlayın",
+                "SQL Server cannot read the file: configure a shared backup folder "
+                "on the target connection",
             )
 
     def restore(
@@ -258,19 +262,17 @@ class RestoreService:
         if not report.can_proceed:
             raise RestoreBlocked(report)
         if report.target_exists and confirmation != target_database:
-            raise ConfirmationRequired(
-                "Var olan veritabanının üzerine yazmak için adını onay olarak yazmalısınız"
-            )
+            raise ConfirmationRequired("Type the database name to confirm overwriting it")
 
         record = report.backup
         outcome = RestoreOutcome(target_database)
         if report.target_exists and protective_backup:
-            emit("INFO", f"'{target_database}' için koruyucu yedek alınıyor")
+            emit("INFO", f"Taking a safety backup of '{target_database}'")
             outcome.protective_backup = self.backups.backup_database(
                 BackupRequest(
                     target_connection_id,
                     target_database,
-                    description=f"Geri yükleme öncesi koruyucu yedek ({record.short_id})",
+                    description=f"Safety backup before restore ({record.short_id})",
                     tags=["pre-restore"],
                 ),
                 ctx,
@@ -278,7 +280,7 @@ class RestoreService:
             )
 
         adapter = self.connections.adapter_for(target_connection_id)
-        emit("INFO", f"Geri yükleme başlıyor: {record.file_path.name} → {target_database}")
+        emit("INFO", f"Restoring {record.file_path.name} → {target_database}")
         try:
             adapter.restore(
                 record.file_path,
@@ -292,28 +294,28 @@ class RestoreService:
             )
         except ToolNotFound as exc:
             raise AdapterError(str(exc)) from exc
-        emit("INFO", "Geri yükleme tamamlandı")
+        emit("INFO", "Restore finished")
 
         if verify:
             snapshot = self.backups.load_snapshot(record)
             if snapshot is None:
                 outcome.verification_note = (
-                    "Yedeğin şema anlık görüntüsü yok; şema doğrulaması atlandı"
+                    "The backup has no schema snapshot; schema verification skipped"
                 )
                 emit("WARNING", outcome.verification_note)
             else:
                 if ctx:
-                    ctx.progress(None, "Geri yüklenen şema doğrulanıyor")
+                    ctx.progress(None, "Verifying restored schema")
                 live = adapter.inspect_schema(target_database)
                 outcome.verification = compare_schemas(
-                    snapshot, live, left_label="yedek", right_label=target_database
+                    snapshot, live, left_label="backup", right_label=target_database
                 )
                 if outcome.verification.identical:
-                    outcome.verification_note = "Şema yedekle birebir aynı"
+                    outcome.verification_note = "Schema matches the backup"
                     emit("INFO", outcome.verification_note)
                 else:
                     outcome.verification_note = (
-                        f"Şemada {len(outcome.verification.items)} fark bulundu"
+                        f"{len(outcome.verification.items)} schema differences found"
                     )
                     emit("WARNING", outcome.verification_note)
         return outcome

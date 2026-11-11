@@ -73,7 +73,7 @@ def test_batch_separate_files_and_isolated_failures(world):
         "erp": BackupStatus.FAILED,
     }
     assert all(r.backup_mode is BackupMode.BATCH for r in recs)
-    assert any("1 başarılı, 1 başarısız" in m for _, m in logs)
+    assert any("1 succeeded, 1 failed" in m for _, m in logs)
 
 
 def test_batch_two_successes_two_files(world):
@@ -99,7 +99,7 @@ def test_validate_detects_tampering(world):
     assert not result.ok
     assert world.app.catalog.get_backup(rec.backup_id).status is BackupStatus.UNVERIFIED
     rec.file_path.unlink()
-    assert "bulunamadı" in svc.validate(rec.backup_id).errors[0]
+    assert "not found" in svc.validate(rec.backup_id).errors[0]
 
 
 def test_delete_backup_removes_files(world):

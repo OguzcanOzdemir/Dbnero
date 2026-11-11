@@ -1,11 +1,12 @@
-"""Backup archive: search, filter, validate, edit metadata, delete, re-import."""
+"""Backups: search the archive, inspect, verify, edit, delete and re-import."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, time
+from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt, QUrl, Signal, SignalInstance
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -16,16 +17,12 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
-    QPushButton,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -36,38 +33,38 @@ from dbnero.storage.catalog import BackupFilter
 from dbnero.ui.backup_page import parse_tags
 from dbnero.ui.common import (
     BACKUP_STATUS_TEXT,
-    STATUS_COLORS,
+    STATUS_TONE,
+    Card,
     JobBridge,
+    Page,
+    StatusDelegate,
+    button,
     fmt_bytes,
     fmt_local,
-    page_header,
+    muted,
     show_error,
 )
 
-COLUMNS = [
-    "Tarih",
-    "Motor",
-    "Sunucu",
-    "Veritabanı",
-    "Açıklama",
-    "Etiketler",
-    "Boyut",
-    "Durum",
-    "Tür",
-]
+COLUMNS = ["Created", "Database", "Server", "Size", "Status", "Description"]
+STATUS_COL = 4
+SIZE_COL = 3
+
+
+ENGINE_SHORT = {Engine.POSTGRESQL: "PostgreSQL", Engine.MYSQL: "MySQL", Engine.MSSQL: "SQL Server"}
 
 
 class EditMetadataDialog(QDialog):
     def __init__(self, record: BackupRecord, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Yedek bilgilerini düzenle")
+        self.setWindowTitle("Edit backup details")
+        self.setMinimumWidth(420)
         form = QFormLayout(self)
         self.description = QLineEdit(record.description)
         self.tags = QLineEdit(", ".join(record.tags))
-        created = QLabel(fmt_local(record.created_at_utc, seconds=True) + "  (değiştirilemez)")
-        form.addRow("Oluşturma zamanı", created)
-        form.addRow("Açıklama", self.description)
-        form.addRow("Etiketler", self.tags)
+        form.addRow("Created", QLabel(fmt_local(record.created_at_utc, seconds=True)))
+        form.addRow("Description", self.description)
+        form.addRow("Tags", self.tags)
+        form.addRow(muted("The creation time is recorded by dbnero and cannot be changed."))
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -76,162 +73,178 @@ class EditMetadataDialog(QDialog):
         form.addRow(buttons)
 
 
-class ArchivePage(QWidget):
+class ArchivePage(Page):
     restore_requested = Signal(str)
     compare_requested = Signal(str)
     backups_changed = Signal()
 
     def __init__(self, app: AppContext, bridge: JobBridge, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+        super().__init__("Backups", "Every backup in your archive.", parent)
         self.app = app
         self.bridge = bridge
         self._records: list[BackupRecord] = []
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(page_header("Yedek Arşivi", "Tüm yedekler, meta verileri ve durumları."))
+        self.btn_import = button("Import from folder…", on_click=self.import_archive)
+        self.btn_retention = button("Clean up…", on_click=self.apply_retention)
+        self.header_actions.addWidget(self.btn_import)
+        self.header_actions.addWidget(self.btn_retention)
 
         filters = QHBoxLayout()
+        filters.setSpacing(8)
         self.text = QLineEdit()
-        self.text.setPlaceholderText("Veritabanı veya açıklamada ara")
-        self.text.returnPressed.connect(self.reload)
+        self.text.setPlaceholderText("Search database or description")
+        self.text.setClearButtonEnabled(True)
+        self.text.textChanged.connect(self.reload)
         self.engine = QComboBox()
-        self.engine.addItem("Tüm motorlar", None)
+        self.engine.addItem("All engines", "")
         for e in Engine:
-            self.engine.addItem(e.display_name, e)
+            self.engine.addItem(e.display_name, e.value)
         self.status = QComboBox()
-        self.status.addItem("Tüm durumlar", None)
+        self.status.addItem("Any status", "")
         for s, label in BACKUP_STATUS_TEXT.items():
-            self.status.addItem(label, s)
+            self.status.addItem(label, s.value)
         self.tag = QLineEdit()
-        self.tag.setPlaceholderText("Etiket")
-        self.tag.setMaximumWidth(120)
+        self.tag.setPlaceholderText("Tag")
+        self.tag.setFixedWidth(110)
         self.tag.returnPressed.connect(self.reload)
-        self.use_dates = QCheckBox("Tarih:")
+        self.use_dates = QCheckBox("From")
         self.date_from = QDateEdit(QDate.currentDate().addMonths(-1))
         self.date_to = QDateEdit(QDate.currentDate())
         for d in (self.date_from, self.date_to):
             d.setCalendarPopup(True)
+            d.setDisplayFormat("yyyy-MM-dd")
             d.setEnabled(False)
+            d.dateChanged.connect(self.reload)
             self.use_dates.toggled.connect(d.setEnabled)
-        btn_filter = QPushButton("Filtrele")
-        btn_filter.clicked.connect(self.reload)
+        self.use_dates.toggled.connect(self.reload)
+        for combo in (self.engine, self.status):
+            combo.currentIndexChanged.connect(self.reload)
+        filters.addWidget(self.text, 1)
         for w in (
-            self.text,
             self.engine,
             self.status,
             self.tag,
             self.use_dates,
             self.date_from,
-            QLabel("–"),
+            QLabel("to"),
             self.date_to,
-            btn_filter,
         ):
             filters.addWidget(w)
-        filters.setStretch(0, 1)
-        layout.addLayout(filters)
+        self.root.addLayout(filters)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        body = QHBoxLayout()
+        body.setSpacing(16)
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setShowGrid(False)
         self.table.setSortingEnabled(True)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setDefaultSectionSize(38)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.table.horizontalHeader().setHighlightSections(False)
+        self.table.setItemDelegateForColumn(STATUS_COL, StatusDelegate(self.table))
         self.table.itemSelectionChanged.connect(self._show_details)
-        self.table.doubleClicked.connect(lambda _: self._show_details())
-        splitter.addWidget(self.table)
+        self.table.doubleClicked.connect(lambda _: self._emit_selected(self.restore_requested))
+        body.addWidget(self.table, 3)
+
+        panel = Card("Details")
+        panel.setFixedWidth(360)
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
-        splitter.addWidget(self.details)
-        splitter.setStretchFactor(0, 3)
-        layout.addWidget(splitter, 1)
+        self.details.setFrameShape(QPlainTextEdit.Shape.NoFrame)
+        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        mono.setPointSizeF(max(mono.pointSizeF() - 0.5, 8.5))
+        self.details.setFont(mono)
+        self.details.setPlaceholderText("Select a backup to see its details.")
+        panel.body.addWidget(self.details, 1)
+        self.btn_restore = button(
+            "Restore…", "primary", lambda: self._emit_selected(self.restore_requested)
+        )
+        self.btn_compare = button(
+            "Compare…", on_click=lambda: self._emit_selected(self.compare_requested)
+        )
+        self.btn_validate = button("Verify", on_click=self.validate_selected)
+        self.btn_folder = button("Show in folder", on_click=self.open_folder)
+        self.btn_edit = button("Edit…", on_click=self.edit_selected)
+        self.btn_delete = button("Delete…", "danger", self.delete_selected)
+        row1 = QHBoxLayout()
+        row1.addWidget(self.btn_restore)
+        row1.addWidget(self.btn_compare)
+        row1.addWidget(self.btn_validate)
+        row2 = QHBoxLayout()
+        row2.addWidget(self.btn_folder)
+        row2.addWidget(self.btn_edit)
+        row2.addStretch(1)
+        row2.addWidget(self.btn_delete)
+        panel.body.addLayout(row1)
+        panel.body.addLayout(row2)
+        body.addWidget(panel, 2)
+        self.root.addLayout(body, 1)
 
-        actions = QHBoxLayout()
-        self.btn_validate = QPushButton("Doğrula")
-        self.btn_restore = QPushButton("Geri yükle…")
-        self.btn_compare = QPushButton("Karşılaştır…")
-        self.btn_folder = QPushButton("Klasörü aç")
-        self.btn_edit = QPushButton("Düzenle…")
-        self.btn_delete = QPushButton("Sil…")
-        self.btn_import = QPushButton("Arşivden içe aktar…")
-        self.btn_retention = QPushButton("Saklama politikası…")
-        self.btn_validate.clicked.connect(self.validate_selected)
-        self.btn_restore.clicked.connect(lambda: self._emit_selected(self.restore_requested))
-        self.btn_compare.clicked.connect(lambda: self._emit_selected(self.compare_requested))
-        self.btn_folder.clicked.connect(self.open_folder)
-        self.btn_edit.clicked.connect(self.edit_selected)
-        self.btn_delete.clicked.connect(self.delete_selected)
-        self.btn_import.clicked.connect(self.import_archive)
-        self.btn_retention.clicked.connect(self.apply_retention)
-        for b in (
-            self.btn_validate,
-            self.btn_restore,
-            self.btn_compare,
-            self.btn_folder,
-            self.btn_edit,
-            self.btn_delete,
-        ):
-            actions.addWidget(b)
-        actions.addStretch(1)
-        actions.addWidget(self.btn_import)
-        actions.addWidget(self.btn_retention)
-        layout.addLayout(actions)
-        self.count_label = QLabel()
-        layout.addWidget(self.count_label)
-
+        self.count_label = muted(wrap=False)
+        self.root.addWidget(self.count_label)
         self.reload()
 
     # -- data -------------------------------------------------------------
 
     def current_filter(self) -> BackupFilter:
+        engine = self.engine.currentData()
+        status = self.status.currentData()
         flt = BackupFilter(
             text=self.text.text().strip() or None,
-            engine=Engine(e) if (e := self.engine.currentData()) else None,
-            status=BackupStatus(st) if (st := self.status.currentData()) else None,
+            engine=Engine(engine) if engine else None,
+            status=BackupStatus(status) if status else None,
             tag=self.tag.text().strip() or None,
         )
         if self.use_dates.isChecked():
-            start = datetime.combine(self.date_from.date().toPython(), time.min).astimezone()  # type: ignore[arg-type]
-            end = datetime.combine(self.date_to.date().toPython(), time.max).astimezone()  # type: ignore[arg-type]
-            flt.created_from = start.astimezone(UTC)
-            flt.created_to = end.astimezone(UTC)
+            start = datetime.combine(self.date_from.date().toPython(), time.min)  # type: ignore[arg-type]
+            end = datetime.combine(self.date_to.date().toPython(), time.max)  # type: ignore[arg-type]
+            flt.created_from = start.astimezone().astimezone(UTC)
+            flt.created_to = end.astimezone().astimezone(UTC)
         return flt
 
     def reload(self) -> None:
+        selected = self.selected()
         self._records = self.app.catalog.list_backups(self.current_filter())
         self.table.setSortingEnabled(False)
+        self.table.clearContents()
         self.table.setRowCount(len(self._records))
         total = 0
         for r, rec in enumerate(self._records):
             total += rec.file_size or 0
             values = [
                 fmt_local(rec.created_at_utc),
-                rec.engine.display_name,
-                rec.server_label,
                 rec.database_name,
-                rec.description,
-                ", ".join(rec.tags),
+                f"{rec.server_label} · {ENGINE_SHORT[rec.engine]}",
                 fmt_bytes(rec.file_size),
                 BACKUP_STATUS_TEXT[rec.status],
-                "Toplu" if rec.batch_id else "Tekil",
+                rec.description,
             ]
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, rec.backup_id)
-                if c == 0:
-                    item.setData(Qt.ItemDataRole.UserRole + 1, rec.created_at_utc.isoformat())
-                if c == 7:
-                    item.setForeground(STATUS_COLORS.get(rec.status.value, STATUS_COLORS["queued"]))
+                if c == STATUS_COL:
+                    item.setData(StatusDelegate.TONE_ROLE, STATUS_TONE[rec.status.value])
+                if c == SIZE_COL:
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
                 self.table.setItem(r, c, item)
         self.table.setSortingEnabled(True)
         self.table.resizeColumnsToContents()
-        self.count_label.setText(f"{len(self._records)} yedek · toplam {fmt_bytes(total)}")
-        self._update_buttons()
+        self.table.setColumnWidth(STATUS_COL, max(self.table.columnWidth(STATUS_COL), 110))
+        noun = "backup" if len(self._records) == 1 else "backups"
+        self.count_label.setText(f"{len(self._records)} {noun} · {fmt_bytes(total)}")
+        if selected is not None:
+            self.select_backup(selected.backup_id)
+        self._show_details()
 
     def selected(self) -> BackupRecord | None:
-        items = self.table.selectedItems()
+        items = self.table.selectedItems() if hasattr(self, "table") else []
         if not items:
             return None
         backup_id = items[0].data(Qt.ItemDataRole.UserRole)
@@ -246,12 +259,11 @@ class ArchivePage(QWidget):
 
     def _update_buttons(self) -> None:
         rec = self.selected()
-        has = rec is not None
-        usable = has and rec.status in {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}  # type: ignore[union-attr]
+        usable = rec is not None and rec.status in {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}
         for b in (self.btn_validate, self.btn_restore, self.btn_compare):
-            b.setEnabled(bool(usable))
+            b.setEnabled(usable)
         for b in (self.btn_folder, self.btn_edit, self.btn_delete):
-            b.setEnabled(has)
+            b.setEnabled(rec is not None)
 
     def _show_details(self) -> None:
         self._update_buttons()
@@ -259,32 +271,38 @@ class ArchivePage(QWidget):
         if rec is None:
             self.details.clear()
             return
+        tools = ", ".join(f"{k} {v}" for k, v in rec.tool_versions.items()) or "–"
         lines = [
-            f"Kimlik: {rec.backup_id}",
-            f"Toplu iş: {rec.batch_id or '-'}",
-            f"Oluşturma (yerel): {fmt_local(rec.created_at_utc, seconds=True)}   "
-            f"UTC: {rec.created_at_utc:%Y-%m-%d %H:%M:%S}",
-            f"Referans tarihi: {fmt_local(rec.reference_date) if rec.reference_date else '-'}",
-            f"Motor: {rec.engine.display_name} {rec.engine_version}",
-            f"Sunucu: {rec.server_label}   Veritabanı: {rec.database_name}",
-            f"Format: {rec.backup_format}   Boyut: {fmt_bytes(rec.file_size)}",
-            f"SHA-256: {rec.checksum_sha256 or '-'}",
-            f"Dosya: {rec.file_path}",
-            f"Şema anlık görüntüsü: {rec.schema_snapshot_path or 'yok'}",
-            f"Araçlar: {', '.join(f'{k} {v}' for k, v in rec.tool_versions.items()) or '-'}",
-            f"Durum: {BACKUP_STATUS_TEXT[rec.status]}",
+            f"{rec.database_name}",
+            f"{rec.engine.display_name} {rec.engine_version}".strip(),
+            "",
+            f"Created     {fmt_local(rec.created_at_utc, seconds=True)} "
+            f"({rec.created_at_utc:%Y-%m-%d %H:%M:%S} UTC)",
+            f"Reference   {fmt_local(rec.reference_date) if rec.reference_date else '–'}",
+            f"Server      {rec.server_label}",
+            f"Status      {BACKUP_STATUS_TEXT[rec.status]}",
+            f"Size        {fmt_bytes(rec.file_size)}",
+            f"Format      {rec.backup_format}",
+            f"Tags        {', '.join(rec.tags) or '–'}",
+            f"Batch       {'yes' if rec.batch_id else 'no'}",
+            f"Tools       {tools}",
+            f"Snapshot    {'yes' if rec.schema_snapshot_path else 'no'}",
+            "",
+            f"SHA-256     {rec.checksum_sha256 or '–'}",
+            f"File        {rec.file_path}",
+            f"ID          {rec.backup_id}",
         ]
         if rec.extra:
-            lines.append("Ek: " + ", ".join(f"{k}={v}" for k, v in rec.extra.items()))
+            lines.append("Extra       " + ", ".join(f"{k}={v}" for k, v in rec.extra.items()))
         if rec.error_message:
-            lines.append(f"Hata / uyarı: {rec.error_message}")
+            lines += ["", f"Problem: {rec.error_message}"]
         self.details.setPlainText("\n".join(lines))
 
     # -- actions ----------------------------------------------------------
 
     def _emit_selected(self, signal: SignalInstance) -> None:
         rec = self.selected()
-        if rec is not None:
+        if rec is not None and rec.status in {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}:
             signal.emit(rec.backup_id)
 
     def validate_selected(self) -> None:
@@ -293,7 +311,7 @@ class ArchivePage(QWidget):
             return
 
         def work(h: JobHandle) -> object:
-            h.log(f"Doğrulanıyor: {rec.file_path.name}")
+            h.log(f"Verifying {rec.file_path.name}")
             result = self.app.backups.validate(rec.backup_id)
             for c in result.checks:
                 h.log(c)
@@ -301,21 +319,21 @@ class ArchivePage(QWidget):
                 h.error(e)
             return result
 
-        job = self.app.jobs.submit(JobKind.VALIDATE, f"Doğrulama: {rec.database_name}", work)
+        job = self.app.jobs.submit(JobKind.VALIDATE, f"Verify {rec.database_name}", work)
         self.btn_validate.setEnabled(False)
 
         def done(j: Job) -> None:
             self.reload()
             self.select_backup(rec.backup_id)
             if j.status is not JobStatus.SUCCEEDED:
-                show_error(self, "Doğrulama", j.error or "Başarısız")
+                show_error(self, "Verification", j.error or "Failed")
                 return
             res = j.result
-            text = "\n".join(["✔ " + c for c in res.checks] + ["✖ " + e for e in res.errors])
+            text = "\n".join(["✓ " + c for c in res.checks] + ["✗ " + e for e in res.errors])
             if res.ok:
-                QMessageBox.information(self, "Doğrulama başarılı", text)
+                QMessageBox.information(self, "Backup verified", text)
             else:
-                QMessageBox.warning(self, "Yedek doğrulanamadı", text)
+                QMessageBox.warning(self, "Backup failed verification", text)
             self.backups_changed.emit()
 
         self.bridge.when_done(job, done)
@@ -346,12 +364,14 @@ class ArchivePage(QWidget):
             return
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle("Yedeği sil")
-        box.setText(f"{rec.database_name} ({fmt_local(rec.created_at_utc)}) yedeği silinsin mi?")
-        box.setInformativeText(
-            "Yedek dosyası, manifest ve şema anlık görüntüsü diskten kalıcı olarak silinir."
+        box.setWindowTitle("Delete backup")
+        box.setText(
+            f"Delete the backup of {rec.database_name} from {fmt_local(rec.created_at_utc)}?"
         )
-        only_catalog = QCheckBox("Dosyaları silme, yalnızca katalogdan kaldır")
+        box.setInformativeText(
+            "The backup file, its manifest and schema snapshot are removed from disk."
+        )
+        only_catalog = QCheckBox("Keep the files, only remove it from the list")
         box.setCheckBox(only_catalog)
         box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         box.setDefaultButton(QMessageBox.StandardButton.No)
@@ -360,25 +380,21 @@ class ArchivePage(QWidget):
         try:
             self.app.backups.delete_backup(rec.backup_id, delete_files=not only_catalog.isChecked())
         except Exception as exc:
-            show_error(self, "Silinemedi", exc)
+            show_error(self, "Could not delete the backup", exc)
         self.reload()
         self.backups_changed.emit()
 
     def import_archive(self) -> None:
         start = str(self.app.backups.archive_root)
-        path = QFileDialog.getExistingDirectory(
-            self, "Manifest dosyalarının aranacağı klasör", start
-        )
+        path = QFileDialog.getExistingDirectory(self, "Folder with dbnero backups", start)
         if not path:
             return
-        from pathlib import Path
-
         report = self.app.catalog_service.import_from_archive(Path(path))
         QMessageBox.information(
             self,
-            "İçe aktarma",
-            f"{report.imported} yedek içe aktarıldı, {report.skipped_existing} zaten katalogdaydı, "
-            f"{len(report.invalid)} geçersiz manifest atlandı.",
+            "Import",
+            f"Imported {report.imported} backups. {report.skipped_existing} were already listed, "
+            f"{len(report.invalid)} manifests could not be read.",
         )
         self.reload()
         self.backups_changed.emit()
@@ -388,25 +404,25 @@ class ArchivePage(QWidget):
         if s.retention_keep_last <= 0 and s.retention_max_age_days <= 0:
             QMessageBox.information(
                 self,
-                "Saklama politikası",
-                "Saklama politikası kapalı. Ayarlar ekranından 'son N yedeği sakla' veya "
-                "'en fazla gün' değerini belirleyin.",
+                "Clean up",
+                "No retention rule is set. In Settings, choose how many backups to keep per "
+                "database or the maximum age.",
             )
             return
         plan = self.app.backups.retention_plan()
         if not plan:
-            QMessageBox.information(self, "Saklama politikası", "Silinecek yedek yok.")
+            QMessageBox.information(self, "Clean up", "Nothing to delete.")
             return
         listing = "\n".join(
             f"• {r.database_name} — {fmt_local(r.created_at_utc)} — {fmt_bytes(r.file_size)}"
             for r in plan[:30]
         )
-        more = f"\n… ve {len(plan) - 30} yedek daha" if len(plan) > 30 else ""
+        more = f"\n… and {len(plan) - 30} more" if len(plan) > 30 else ""
         answer = QMessageBox.warning(
             self,
-            "Saklama politikasını uygula",
-            f"{len(plan)} yedek kalıcı olarak silinecek "
-            "(her veritabanının en yeni başarılı yedeği korunur):\n\n" + listing + more,
+            "Clean up backups",
+            f"{len(plan)} backups will be deleted permanently. The newest good backup of every "
+            "database is always kept.\n\n" + listing + more,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

@@ -146,7 +146,7 @@ class BackupService:
         )
         record.file_path = paths.backup
         self.catalog.add_backup(record)
-        emit("INFO", f"{request.database}: yedekleme başladı ({profile.name})")
+        emit("INFO", f"{request.database}: backup started ({profile.name})")
 
         try:
             if ctx:
@@ -156,22 +156,22 @@ class BackupService:
             snapshot_path: Path | None = None
             try:
                 if ctx:
-                    ctx.progress(None, f"{request.database}: şema anlık görüntüsü")
+                    ctx.progress(None, f"{request.database}: capturing schema snapshot")
                 snap = adapter.inspect_schema(request.database)
                 paths.schema.parent.mkdir(parents=True, exist_ok=True)
                 snap.save(paths.schema)
                 snapshot_path = paths.schema
                 emit(
                     "INFO",
-                    f"{request.database}: şema anlık görüntüsü alındı ({len(snap.tables)} tablo)",
+                    f"{request.database}: schema snapshot captured ({len(snap.tables)} tables)",
                 )
             except AdapterError as exc:
-                emit("WARNING", f"{request.database}: şema anlık görüntüsü alınamadı: {exc}")
+                emit("WARNING", f"{request.database}: could not capture schema snapshot: {exc}")
 
             with partial_file(paths.backup) as partial:
                 result = adapter.backup(request.database, partial, options, ctx)
                 if ctx:
-                    ctx.progress(None, f"{request.database}: SHA-256 hesaplanıyor")
+                    ctx.progress(None, f"{request.database}: computing SHA-256")
                 checksum = sha256_file(partial)
                 size = partial.stat().st_size
                 finalize(partial, paths.backup)
@@ -183,7 +183,7 @@ class BackupService:
             if not validation.ok:
                 emit(
                     "WARNING",
-                    f"{request.database}: doğrulama başarısız: {'; '.join(validation.errors)}",
+                    f"{request.database}: validation failed: {'; '.join(validation.errors)}",
                 )
 
             record.file_size = size
@@ -208,16 +208,16 @@ class BackupService:
                 status=status,
                 error_message=record.error_message,
             )
-            emit("INFO", f"{request.database}: tamamlandı → {paths.backup.name} ({size} bayt)")
+            emit("INFO", f"{request.database}: done → {paths.backup.name} ({size} bytes)")
             return record
         except OperationCancelled:
-            self._mark(record, BackupStatus.CANCELLED, "İptal edildi", paths.schema)
+            self._mark(record, BackupStatus.CANCELLED, "Cancelled", paths.schema)
             emit("WARNING", f"{request.database}: iptal edildi")
             raise
         except Exception as exc:
             message = mask_secrets(str(exc)) or type(exc).__name__
             self._mark(record, BackupStatus.FAILED, message, paths.schema)
-            emit("ERROR", f"{request.database}: başarısız: {message}")
+            emit("ERROR", f"{request.database}: failed: {message}")
             raise
 
     def _mark(
@@ -238,13 +238,13 @@ class BackupService:
         needed = (estimated or 0) + reserve
         if free < needed:
             raise InsufficientDiskSpace(
-                f"Arşiv diskinde yeterli boş alan yok: {free // 2**20} MB boş, "
-                f"en az {needed // 2**20} MB gerekiyor"
+                f"Not enough free space on the archive disk: {free // 2**20} MB free, "
+                f"at least {needed // 2**20} MB required"
             )
         if estimated:
             emit(
                 "INFO",
-                f"Tahmini veritabanı boyutu {estimated // 2**20} MB, boş alan {free // 2**20} MB",
+                f"Estimated database size {estimated // 2**20} MB, free space {free // 2**20} MB",
             )
 
     # -- batch backup -----------------------------------------------------
@@ -264,7 +264,7 @@ class BackupService:
         """Back up several databases into separate files and catalog records.
         A failing database never cancels or hides the others."""
         if not databases:
-            raise BackupError("En az bir veritabanı seçilmelidir")
+            raise BackupError("Select at least one database")
         emit = log_fn or _noop_log
         batch = BackupBatch(
             connection_id=connection_id, database_names=list(databases), description=description
@@ -293,13 +293,13 @@ class BackupService:
                 )
                 return BatchItemResult(db, rec)
             except OperationCancelled:
-                return BatchItemResult(db, None, "İptal edildi")
+                return BatchItemResult(db, None, "Cancelled")
             except Exception as exc:
                 return BatchItemResult(db, None, mask_secrets(str(exc)) or type(exc).__name__)
             finally:
                 done += 1
                 if ctx:
-                    ctx.progress(done / total, f"{done}/{total} veritabanı işlendi")
+                    ctx.progress(done / total, f"{done}/{total} databases processed")
 
         if parallel == 1:
             result.items = [run_one(db) for db in databases]
@@ -309,7 +309,7 @@ class BackupService:
 
         emit(
             "INFO" if not result.failed else "WARNING",
-            f"Toplu yedek bitti: {len(result.succeeded)} başarılı, {len(result.failed)} başarısız",
+            f"Batch finished: {len(result.succeeded)} succeeded, {len(result.failed)} failed",
         )
         if ctx and ctx.cancelled:
             raise OperationCancelled
@@ -323,21 +323,21 @@ class BackupService:
         errors: list[str] = []
         path = record.file_path
         if not path.is_file():
-            errors.append(f"Yedek dosyası bulunamadı: {path}")
+            errors.append(f"Backup file not found: {path}")
         else:
             size = path.stat().st_size
             if record.file_size is not None and size != record.file_size:
-                errors.append(f"Dosya boyutu değişmiş: kayıtlı {record.file_size}, şu an {size}")
+                errors.append(f"File size changed: recorded {record.file_size}, now {size}")
             else:
-                checks.append(f"Dosya boyutu doğru ({size} bayt)")
+                checks.append(f"File size matches ({size} bytes)")
             if record.checksum_sha256:
                 actual = sha256_file(path)
                 if actual != record.checksum_sha256:
-                    errors.append("SHA-256 özeti uyuşmuyor: dosya bozulmuş veya değiştirilmiş")
+                    errors.append("SHA-256 mismatch: the file is corrupted or was modified")
                 else:
-                    checks.append("SHA-256 özeti doğru")
+                    checks.append("SHA-256 matches")
             else:
-                errors.append("Kayıtlı SHA-256 özeti yok")
+                errors.append("No SHA-256 recorded for this backup")
             if not errors:
                 adapter = self._offline_adapter(record)
                 deep = adapter.validate_backup(path)

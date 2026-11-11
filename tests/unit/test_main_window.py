@@ -26,7 +26,7 @@ def _wait_jobs(qtbot, app):
 
 
 def test_navigation(window):
-    assert window.nav.count() == len(PAGES)
+    assert window.nav.count() == len(PAGES) + 1  # one group spacer
     assert window.current_page_key() == "overview"
     for spec in PAGES:
         window.show_page(spec.key)
@@ -49,7 +49,7 @@ def test_connections_page_save_and_test(qtbot, window, world):
     assert page.password.text() == ""
 
     page.test_connection()
-    qtbot.waitUntil(lambda: "başarılı" in page.status.text(), timeout=5000)
+    qtbot.waitUntil(lambda: "successful" in page.status.text(), timeout=5000)
     page.discover()
     qtbot.waitUntil(lambda: page.databases.count() == 1, timeout=5000)
 
@@ -63,13 +63,13 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     page.connection.setCurrentIndex(page.connection.findData(world.pg.id))
     qtbot.waitUntil(lambda: page.db_list.count() == 2, timeout=5000)
     page._check_all(True)
-    assert "Toplu yedek: 2" in page.summary.text()
+    assert "2 databases" in page.summary.text()
     page.description.setText("ui test")
     page.tags.setText("ui, test")
     page.start()
     _wait_jobs(qtbot, app)
-    qtbot.waitUntil(lambda: "2 başarılı" in page.summary.text(), timeout=5000)
-    assert "Toplu yedek raporu" in page.log.toPlainText()
+    qtbot.waitUntil(lambda: "2 succeeded" in page.result.label.text(), timeout=5000)
+    assert "Batch report" in page.log.toPlainText()
 
     archive = window.archive
     archive.reload()
@@ -97,7 +97,7 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     assert restore.btn_start.isEnabled()
     restore.start()
     _wait_jobs(qtbot, app)
-    qtbot.waitUntil(lambda: "tamamlandı" in restore.status.text(), timeout=5000)
+    qtbot.waitUntil(lambda: "Restore finished" in restore.status.text(), timeout=5000)
     assert "restored_db" in world.servers["pg2"].databases
 
     # Overwrite path requires typing the name.
@@ -157,5 +157,5 @@ def test_tool_report_html():
         EngineToolReport(Engine.MSSQL, [], ["ODBC Driver 18 for SQL Server"]),
     ]
     html = tool_report_html(reports, keyring_ok=False)
-    assert "pg_dump</b> bulunamadı" in html and "Kurulum" in html
-    assert "ODBC Driver 18" in html and "Parola kasası" in html
+    assert "pg_dump</b> not found" in html and "How to install" in html
+    assert "ODBC Driver 18" in html and "Password storage" in html

@@ -54,7 +54,7 @@ def test_data_backup_vs_live_uses_isolated_restore(world):
     assert logs_table.identical is False and logs_table.method.value == "fingerprint"
     # temp database was created on the scratch server and dropped again
     assert world.servers["pg2"].restores and world.servers["pg2"].databases == {}
-    assert any("silindi" in m for m in logs)
+    assert any("dropped" in m for m in logs)
 
 
 def test_data_backup_vs_backup(world):

@@ -1,13 +1,13 @@
-"""Main window: navigation sidebar plus a stacked page area."""
+"""Main window: an ink navigation rail beside a stack of pages."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -15,12 +15,14 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QStackedWidget,
+    QVBoxLayout,
     QWidget,
 )
 
 from dbnero import APP_NAME, __version__
 from dbnero.core.app import AppContext
 from dbnero.core.jobs import Job
+from dbnero.ui import icons, theme
 from dbnero.ui.archive_page import ArchivePage
 from dbnero.ui.backup_page import BackupPage
 from dbnero.ui.common import JOB_STATUS_TEXT, JobBridge
@@ -36,26 +38,30 @@ from dbnero.ui.settings_page import SettingsPage, ToolCheckDialog
 class PageSpec:
     key: str
     title: str
+    icon: str
 
 
 PAGES: tuple[PageSpec, ...] = (
-    PageSpec("overview", "Genel Bakış"),
-    PageSpec("connections", "Bağlantılar"),
-    PageSpec("new_backup", "Yeni Yedek"),
-    PageSpec("archive", "Yedek Arşivi"),
-    PageSpec("restore", "Geri Yükle"),
-    PageSpec("compare", "Karşılaştır"),
-    PageSpec("jobs", "İş Geçmişi"),
-    PageSpec("settings", "Ayarlar"),
+    PageSpec("overview", "Home", "home"),
+    PageSpec("new_backup", "Back up", "backup"),
+    PageSpec("archive", "Backups", "archive"),
+    PageSpec("restore", "Restore", "restore"),
+    PageSpec("compare", "Compare", "compare"),
+    PageSpec("connections", "Connections", "connections"),
+    PageSpec("jobs", "Activity", "activity"),
+    PageSpec("settings", "Settings", "settings"),
 )
+# A visual gap is drawn before these entries to group the rail.
+GROUP_STARTS = {"connections"}
 
 
 class MainWindow(QMainWindow):
     def __init__(self, app: AppContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.app = app
-        self.setWindowTitle(f"{APP_NAME} {__version__}")
-        self.resize(1200, 780)
+        self.setWindowTitle(APP_NAME)
+        self.resize(1280, 820)
+        self.setMinimumSize(1000, 640)
         self.bridge = JobBridge(app.jobs, self)
 
         self.overview = OverviewPage(app, self.bridge)
@@ -77,49 +83,91 @@ class MainWindow(QMainWindow):
             "settings": self.settings_page,
         }
 
+        rail = QWidget()
+        rail.setObjectName("rail")
+        rail.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        rail.setFixedWidth(212)
+        rail_layout = QVBoxLayout(rail)
+        rail_layout.setContentsMargins(0, 6, 0, 6)
+        rail_layout.setSpacing(0)
+        brand = QLabel(APP_NAME)
+        brand.setObjectName("brand")
+        sub = QLabel("Database backups")
+        sub.setObjectName("brandSub")
+        rail_layout.addWidget(brand)
+        rail_layout.addWidget(sub)
+
         self.nav = QListWidget()
-        self.nav.setObjectName("navigation")
-        self.nav.setFixedWidth(190)
-        self.nav.setStyleSheet("QListWidget#navigation::item { padding: 8px 10px; }")
+        self.nav.setObjectName("nav")
+        self.nav.setIconSize(QSize(18, 18))
+        self.nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.stack = QStackedWidget()
         self._page_index: dict[str, int] = {}
+        self._row_for_key: dict[str, int] = {}
+        self._key_for_row: dict[int, str] = {}
         for spec in PAGES:
+            if spec.key in GROUP_STARTS:
+                spacer = QListWidgetItem("")
+                spacer.setFlags(Qt.ItemFlag.NoItemFlags)
+                spacer.setSizeHint(QSize(10, 18))
+                self.nav.addItem(spacer)
             item = QListWidgetItem(spec.title)
             item.setData(Qt.ItemDataRole.UserRole, spec.key)
             self.nav.addItem(item)
+            row = self.nav.count() - 1
+            self._row_for_key[spec.key] = row
+            self._key_for_row[row] = spec.key
             self._page_index[spec.key] = self.stack.addWidget(widgets[spec.key])
+        self._paint_icons()
         self.nav.currentRowChanged.connect(self._on_nav)
-        self.nav.setCurrentRow(0)
+        rail_layout.addWidget(self.nav, 1)
+        self.job_status = QLabel()
+        self.job_status.setObjectName("railFooter")
+        footer = QLabel(f"Version {__version__}")
+        footer.setObjectName("railFooter")
+        rail_layout.addWidget(self.job_status)
+        rail_layout.addWidget(footer)
 
         central = QWidget()
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.nav)
+        layout.setSpacing(0)
+        layout.addWidget(rail)
         layout.addWidget(self.stack, 1)
         self.setCentralWidget(central)
-        self.job_status = QLabel()
-        self.statusBar().addPermanentWidget(self.job_status)
-        self.statusBar().showMessage("Hazır")
+        self.nav.setCurrentRow(self._row_for_key["overview"])
 
         # Cross-page wiring.
-        refreshers: list[Callable[[], None]] = [
-            self.backup.reload_connections,
-            self.restore.reload,
-            self.compare.reload,
-            self.overview.reload,
-        ]
-        for r in refreshers[:3]:
-            self.connections.connections_changed.connect(r)
+        for refresh in (self.backup.reload_connections, self.restore.reload, self.compare.reload):
+            self.connections.connections_changed.connect(refresh)
+        self.connections.connections_changed.connect(self.overview.reload)
         for page in (self.backup, self.archive, self.restore):
             page.backups_changed.connect(self._on_backups_changed)
         self.archive.restore_requested.connect(self._open_restore)
         self.archive.compare_requested.connect(self._open_compare)
+        self.overview.navigate.connect(self.show_page)
+        self.settings_page.theme_changed.connect(self._on_theme_changed)
         self.bridge.started.connect(self._update_job_status)
         self.bridge.finished.connect(self._on_job_finished)
 
+    def _paint_icons(self) -> None:
+        t = theme.tokens()
+        for row, key in self._key_for_row.items():
+            spec = next(p for p in PAGES if p.key == key)
+            self.nav.item(row).setIcon(icons.icon(spec.icon, t.rail_text, "#FFFFFF"))
+
+    def _on_theme_changed(self, mode: str) -> None:
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            theme.apply_theme(app, theme.ThemeMode(mode))
+            self._paint_icons()
+
     def _on_nav(self, row: int) -> None:
-        self.stack.setCurrentIndex(row)
-        key = PAGES[row].key
+        key = self._key_for_row.get(row)
+        if key is None:
+            return
+        self.stack.setCurrentIndex(self._page_index[key])
         if key == "overview":
             self.overview.reload()
         elif key == "archive":
@@ -142,18 +190,22 @@ class MainWindow(QMainWindow):
         self.show_page("compare")
 
     def _update_job_status(self, _job: Job | None = None) -> None:
-        active = self.app.jobs.active_jobs()
-        self.job_status.setText(f"{len(active)} iş çalışıyor" if active else "")
+        active = len(self.app.jobs.active_jobs())
+        self.job_status.setText(
+            f"● {active} job{'s' if active != 1 else ''} running" if active else ""
+        )
 
     def _on_job_finished(self, job: Job) -> None:
         self._update_job_status()
-        self.statusBar().showMessage(f"{job.title}: {JOB_STATUS_TEXT[job.status]}", 8000)
+        if not self.app.jobs.active_jobs():
+            self.job_status.setText(f"Last job: {JOB_STATUS_TEXT[job.status].lower()}")
+            self.job_status.setToolTip(job.title)
 
     def show_page(self, key: str) -> None:
-        self.nav.setCurrentRow(self._page_index[key])
+        self.nav.setCurrentRow(self._row_for_key[key])
 
     def current_page_key(self) -> str:
-        return PAGES[self.stack.currentIndex()].key
+        return self._key_for_row[self.nav.currentRow()]
 
     def maybe_show_first_run(self) -> None:
         if not self.app.settings.first_run_completed:
@@ -166,9 +218,9 @@ class MainWindow(QMainWindow):
         if active:
             answer = QMessageBox.question(
                 self,
-                "Çalışan işler",
-                f"{len(active)} iş hâlâ çalışıyor. Çıkarsanız iptal edilecekler. "
-                "Yarıda kalan geri yüklemeler hedef veritabanını eksik bırakabilir. Çıkılsın mı?",
+                "Jobs are running",
+                f"{len(active)} job(s) are still running and will be cancelled. An interrupted "
+                "restore can leave the target database incomplete. Quit anyway?",
             )
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()

@@ -161,11 +161,11 @@ class JobManager:
             job.ctx.raise_if_cancelled()
             job.result = fn(handle)
             job.status = JobStatus.SUCCEEDED
-            self._log(job, "INFO", "Tamamlandı")
+            self._log(job, "INFO", "Finished")
         except OperationCancelled:
             job.status = JobStatus.CANCELLED
-            job.error = "İptal edildi"
-            self._log(job, "WARNING", "İş iptal edildi")
+            job.error = "Cancelled"
+            self._log(job, "WARNING", "Job cancelled")
         except Exception as exc:
             job.status = JobStatus.FAILED
             job.error = mask_secrets(str(exc)) or type(exc).__name__
@@ -201,7 +201,7 @@ class JobManager:
                 job.status = JobStatus.CANCELLED
                 job.finished_at_utc = utc_now()
                 if self._catalog is not None:
-                    self._catalog.finish_job(job_id, JobStatus.CANCELLED, "İptal edildi")
+                    self._catalog.finish_job(job_id, JobStatus.CANCELLED, "Cancelled")
                 self._emit(JobEvent(JobEventType.FINISHED, job))
 
     def get(self, job_id: str) -> Job | None:
@@ -234,7 +234,7 @@ class JobManager:
         for rec in self._catalog.list_jobs(limit=1000):
             if rec.status in {JobStatus.RUNNING, JobStatus.QUEUED} and rec.job_id not in self._jobs:
                 self._catalog.finish_job(
-                    rec.job_id, JobStatus.FAILED, "Uygulama kapanırken yarıda kaldı"
+                    rec.job_id, JobStatus.FAILED, "Interrupted when the application closed"
                 )
                 count += 1
         return count

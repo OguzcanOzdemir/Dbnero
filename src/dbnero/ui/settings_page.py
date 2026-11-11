@@ -1,21 +1,23 @@
-"""Settings page and first-run tool check dialog."""
+"""Settings page and the first-run environment check."""
 
 from __future__ import annotations
 
+import html
 import sys
+from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
+    QScrollArea,
     QSpinBox,
     QTextBrowser,
     QVBoxLayout,
@@ -25,76 +27,84 @@ from PySide6.QtWidgets import (
 from dbnero.core.app import AppContext
 from dbnero.core.connection_service import EngineToolReport, install_hint
 from dbnero.core.models import Engine
-from dbnero.ui.common import page_header, run_async
+from dbnero.ui.common import Card, Page, button, muted, run_async
 
 TOOL_NAMES = ("pg_dump", "pg_restore", "mysqldump", "mysql")
 
 
 def tool_report_html(reports: list[EngineToolReport], keyring_ok: bool) -> str:
+    e = html.escape
     rows = []
     for rep in reports:
-        icon = "✔" if rep.ok else "✖"
-        rows.append(f"<h3>{icon} {rep.engine.display_name}</h3><ul>")
+        mark = "✓" if rep.ok else "✗"
+        rows.append(f"<h3>{mark} {e(rep.engine.display_name)}</h3><ul>")
         for t in rep.tools:
             if t.available:
-                rows.append(f"<li>✔ <b>{t.name}</b> {t.version or ''} — <code>{t.path}</code></li>")
+                rows.append(
+                    f"<li>✓ <b>{e(t.name)}</b> {e(t.version or '')} — "
+                    f"<code>{e(str(t.path))}</code></li>"
+                )
             else:
-                rows.append(f"<li>✖ <b>{t.name}</b> bulunamadı</li>")
+                rows.append(f"<li>✗ <b>{e(t.name)}</b> not found</li>")
         if rep.engine is Engine.MSSQL:
             if rep.odbc_drivers:
-                rows.append("<li>✔ ODBC sürücüleri: " + ", ".join(rep.odbc_drivers) + "</li>")
+                rows.append("<li>✓ ODBC drivers: " + e(", ".join(rep.odbc_drivers)) + "</li>")
             else:
-                rows.append("<li>✖ SQL Server ODBC sürücüsü bulunamadı</li>")
+                rows.append("<li>✗ No ODBC driver for SQL Server found</li>")
         rows.append("</ul>")
         if not rep.ok:
-            rows.append(f"<p><i>Kurulum:</i> {install_hint(rep.engine, sys.platform)}</p>")
+            rows.append(
+                f"<p><i>How to install:</i> {e(install_hint(rep.engine, sys.platform))}</p>"
+            )
     rows.append(
         "<h3>"
-        + ("✔" if keyring_ok else "✖")
-        + " Parola kasası</h3>"
+        + ("✓" if keyring_ok else "✗")
+        + " Password storage</h3>"
         + (
-            "<p>İşletim sistemi anahtar kasası kullanılabilir.</p>"
+            "<p>Your system keychain is available.</p>"
             if keyring_ok
-            else "<p>Güvenli parola kasası bulunamadı. Linux'ta GNOME Keyring veya KWallet "
-            "kurup oturumda kilidini açın. Kasa olmadan parolalar kaydedilemez.</p>"
+            else "<p>No system keychain was found. On Linux, install and unlock GNOME Keyring "
+            "or KWallet. Without it, passwords are only kept until dbnero closes.</p>"
         )
     )
     rows.append(
-        "<p>Not: Yalnızca kullanacağınız motorların araçları gereklidir. PostgreSQL için "
-        "<code>pg_dump</code> sürümü sunucu sürümüyle aynı veya daha yeni olmalıdır.</p>"
+        "<p>You only need the tools for the databases you use. For PostgreSQL, "
+        "<code>pg_dump</code> must be the same version as the server or newer.</p>"
     )
     return "\n".join(rows)
 
 
 class ToolCheckDialog(QDialog):
-    """First-run wizard: checks client tools, ODBC drivers and the keyring."""
+    """First-run check of client tools, ODBC drivers and the keychain."""
 
     def __init__(self, app: AppContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.app = app
-        self.setWindowTitle("dbnero — Ortam kontrolü")
-        self.resize(640, 520)
+        self.setWindowTitle("Welcome to dbnero")
+        self.resize(620, 520)
         layout = QVBoxLayout(self)
-        intro = QLabel(
-            "dbnero, veritabanı motorlarının kendi yedekleme araçlarını kullanır. Bu araçlar "
-            "uygulamayla birlikte gelmez; aşağıda bu bilgisayarda bulunanlar listelenmiştir. "
-            "Araç yollarını daha sonra Ayarlar ekranından değiştirebilirsiniz."
+        layout.setContentsMargins(22, 20, 22, 16)
+        title = QLabel("Check your setup")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        layout.addWidget(
+            muted(
+                "dbnero uses each database's own backup tools. They are not bundled, so here "
+                "is what this computer has. You can change tool locations later in Settings."
+            )
         )
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
         self.browser = QTextBrowser()
         self.browser.setOpenExternalLinks(True)
         layout.addWidget(self.browser, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        recheck = QPushButton("Yeniden kontrol et")
+        recheck = button("Check again", on_click=self.refresh)
         buttons.addButton(recheck, QDialogButtonBox.ButtonRole.ActionRole)
-        recheck.clicked.connect(self.refresh)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
         self.refresh()
 
     def refresh(self) -> None:
-        self.browser.setHtml("Kontrol ediliyor…")
+        self.browser.setHtml("Checking…")
         run_async(
             self.app.connections.check_all_tools,
             lambda reports: self.browser.setHtml(
@@ -104,94 +114,113 @@ class ToolCheckDialog(QDialog):
         )
 
 
-class SettingsPage(QWidget):
+class SettingsPage(Page):
+    theme_changed = Signal(str)
+
     def __init__(self, app: AppContext, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+        super().__init__("Settings", "", parent)
         self.app = app
         s = app.settings
-        layout = QVBoxLayout(self)
-        layout.addWidget(page_header("Ayarlar"))
+        self.btn_save = button("Save", "primary", self.save)
+        self.header_actions.addWidget(self.btn_save)
 
-        storage = QGroupBox("Arşiv")
-        sf = QFormLayout(storage)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        inner = QWidget()
+        inner.setObjectName("page")
+        col = QVBoxLayout(inner)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(12)
+        scroll.setWidget(inner)
+        self.root.addWidget(scroll, 1)
+
+        def form_card(title: str) -> tuple[Card, QFormLayout]:
+            card = Card(title)
+            form = QFormLayout()
+            form.setHorizontalSpacing(18)
+            form.setVerticalSpacing(10)
+            card.body.addLayout(form)
+            col.addWidget(card)
+            return card, form
+
+        _, appearance = form_card("Appearance")
+        self.theme = QComboBox()
+        for value, label in (("system", "Match system"), ("light", "Light"), ("dark", "Dark")):
+            self.theme.addItem(label, value)
+        self.theme.setCurrentIndex(max(self.theme.findData(s.theme), 0))
+        appearance.addRow("Theme", self.theme)
+
+        _, storage = form_card("Archive")
         self.archive_root = QLineEdit(str(s.resolved_archive_root()))
-        browse = QPushButton("Gözat…")
-        browse.clicked.connect(self._browse_archive)
         arow = QHBoxLayout()
         arow.addWidget(self.archive_root, 1)
-        arow.addWidget(browse)
-        sf.addRow("Arşiv klasörü", arow)
+        arow.addWidget(button("Browse…", on_click=self._browse_archive))
+        storage.addRow("Archive folder", arow)
         self.min_free = QSpinBox()
         self.min_free.setRange(0, 1_000_000)
         self.min_free.setSuffix(" MB")
         self.min_free.setValue(s.min_free_space_mb)
-        sf.addRow("Yedek sonrası en az boş alan", self.min_free)
+        storage.addRow("Keep free after a backup", self.min_free)
         self.disk_warn = QSpinBox()
         self.disk_warn.setRange(50, 100)
         self.disk_warn.setSuffix(" %")
         self.disk_warn.setValue(s.disk_warning_percent)
-        sf.addRow("Disk doluluk uyarısı", self.disk_warn)
+        storage.addRow("Warn when the disk is fuller than", self.disk_warn)
         catalog = QLabel(str(s.resolved_catalog_path()))
+        catalog.setObjectName("muted")
         catalog.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        sf.addRow("Katalog dosyası", catalog)
-        layout.addWidget(storage)
+        storage.addRow("Catalog file", catalog)
 
-        retention = QGroupBox("Saklama politikası (Yedek Arşivi ekranından onayla uygulanır)")
-        rf = QFormLayout(retention)
+        _, retention = form_card("Clean-up rules")
         self.keep_last = QSpinBox()
         self.keep_last.setRange(0, 10_000)
-        self.keep_last.setSpecialValueText("Kapalı")
+        self.keep_last.setSpecialValueText("Keep all")
         self.keep_last.setValue(s.retention_keep_last)
         self.max_age = QSpinBox()
         self.max_age.setRange(0, 36_500)
-        self.max_age.setSpecialValueText("Kapalı")
-        self.max_age.setSuffix(" gün")
+        self.max_age.setSpecialValueText("No limit")
+        self.max_age.setSuffix(" days")
         self.max_age.setValue(s.retention_max_age_days)
-        rf.addRow("Veritabanı başına son N yedeği sakla", self.keep_last)
-        rf.addRow("En fazla yaş", self.max_age)
-        layout.addWidget(retention)
+        retention.addRow("Backups to keep per database", self.keep_last)
+        retention.addRow("Delete backups older than", self.max_age)
+        retention.addRow(
+            muted("Rules are applied only when you choose Clean up on the Backups page.")
+        )
 
-        perf = QGroupBox("Performans")
-        pf = QFormLayout(perf)
+        _, perf = form_card("Performance")
         self.parallel = QSpinBox()
         self.parallel.setRange(1, 8)
         self.parallel.setValue(s.max_parallel_jobs)
-        pf.addRow("Toplu yedekte eşzamanlı veritabanı", self.parallel)
-        layout.addWidget(perf)
+        perf.addRow("Databases backed up at once", self.parallel)
 
-        tools = QGroupBox("Araç konumları (boş = PATH'te ara)")
-        tf = QFormLayout(tools)
+        tools_card, tools = form_card("Database tools")
         self.tool_edits: dict[str, QLineEdit] = {}
         for name in TOOL_NAMES:
             edit = QLineEdit(s.tool_paths.get(name, ""))
-            btn = QPushButton("…")
-            btn.setMaximumWidth(32)
-            btn.clicked.connect(lambda _=False, e=edit, n=name: self._browse_tool(e, n))
+            edit.setPlaceholderText("Found on PATH")
             r = QHBoxLayout()
             r.addWidget(edit, 1)
-            r.addWidget(btn)
-            tf.addRow(name, r)
+            r.addWidget(button("…", on_click=self._tool_browser(edit, name)))
+            tools.addRow(name, r)
             self.tool_edits[name] = edit
-        check = QPushButton("Araçları kontrol et…")
-        check.clicked.connect(lambda: ToolCheckDialog(self.app, self).exec())
-        tf.addRow(check)
-        layout.addWidget(tools)
-
-        buttons = QHBoxLayout()
-        save = QPushButton("Kaydet")
-        save.clicked.connect(self.save)
-        buttons.addStretch(1)
-        buttons.addWidget(save)
-        layout.addLayout(buttons)
-        layout.addStretch(1)
+        tools_card.body.addWidget(
+            button("Check tools…", on_click=lambda: ToolCheckDialog(self.app, self).exec()),
+            0,
+            Qt.AlignmentFlag.AlignLeft,
+        )
+        col.addStretch(1)
 
     def _browse_archive(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Arşiv klasörü", self.archive_root.text())
+        path = QFileDialog.getExistingDirectory(self, "Archive folder", self.archive_root.text())
         if path:
             self.archive_root.setText(path)
 
+    def _tool_browser(self, edit: QLineEdit, name: str) -> Callable[[], None]:
+        return lambda: self._browse_tool(edit, name)
+
     def _browse_tool(self, edit: QLineEdit, name: str) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, f"{name} konumu")
+        path, _ = QFileDialog.getOpenFileName(self, f"Location of {name}")
         if path:
             edit.setText(path)
 
@@ -201,14 +230,14 @@ class SettingsPage(QWidget):
         if new_root and new_root != str(s.resolved_archive_root()):
             if self.app.jobs.active_jobs():
                 QMessageBox.warning(
-                    self, "Ayarlar", "Çalışan işler varken arşiv klasörü değiştirilemez."
+                    self, "Settings", "Wait until running jobs finish before moving the archive."
                 )
                 return
             QMessageBox.information(
                 self,
-                "Arşiv klasörü",
-                "Yeni yedekler bu klasöre yazılacak. Mevcut yedekler eski konumlarında kalır; "
-                "taşırsanız Yedek Arşivi ekranından 'Arşivden içe aktar' ile yeniden tanıtın.",
+                "Archive folder",
+                "New backups will be written to this folder. Existing backups stay where they "
+                "are; if you move them, use Import from folder on the Backups page.",
             )
         s.archive_root = new_root
         s.min_free_space_mb = self.min_free.value()
@@ -217,5 +246,10 @@ class SettingsPage(QWidget):
         s.retention_max_age_days = self.max_age.value()
         s.max_parallel_jobs = self.parallel.value()
         s.tool_paths = {n: e.text().strip() for n, e in self.tool_edits.items() if e.text().strip()}
+        theme = str(self.theme.currentData())
+        changed_theme = theme != s.theme
+        s.theme = theme
         self.app.save_settings()
-        QMessageBox.information(self, "Ayarlar", "Ayarlar kaydedildi.")
+        if changed_theme:
+            self.theme_changed.emit(theme)
+        QMessageBox.information(self, "Settings", "Settings saved.")

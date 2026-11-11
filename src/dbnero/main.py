@@ -29,6 +29,14 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
+    app.setApplicationDisplayName(APP_NAME)
+    from dbnero.ui.theme import ThemeMode, apply_theme
+
+    try:
+        mode = ThemeMode(settings.theme)
+    except ValueError:
+        mode = ThemeMode.SYSTEM
+    apply_theme(app, mode)
 
     try:
         context = AppContext.create(settings, settings_path=settings_path())

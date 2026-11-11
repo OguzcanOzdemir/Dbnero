@@ -23,7 +23,7 @@ def test_restore_to_new_database_and_verify(world, backup):
 def test_preflight_engine_mismatch(world, backup):
     report = world.app.restores.preflight(backup.backup_id, world.my.id, "x")
     assert not report.can_proceed
-    assert "Motor uyuşmuyor" in report.errors[0].message
+    assert "Engine mismatch" in report.errors[0].message
 
 
 def test_existing_target_needs_overwrite_and_confirmation(world, backup):
@@ -44,7 +44,7 @@ def test_existing_target_needs_overwrite_and_confirmation(world, backup):
 
 def test_system_database_rejected(world, backup):
     report = world.app.restores.preflight(backup.backup_id, world.pg.id, "sysdb", overwrite=True)
-    assert any("Sistem" in c.message for c in report.errors)
+    assert any("system database" in c.message for c in report.errors)
 
 
 def test_corrupted_file_blocks_restore(world, backup):
@@ -57,14 +57,14 @@ def test_corrupted_file_blocks_restore(world, backup):
 def test_unreachable_target(world, backup):
     world.servers["pg2"].unreachable = True
     report = world.app.restores.preflight(backup.backup_id, world.pg2.id, "x")
-    assert any("bağlanılamadı" in c.message for c in report.errors)
+    assert any("Cannot connect" in c.message for c in report.errors)
 
 
 def test_older_server_warns(world, backup):
     world.servers["pg2"].version = "15.0"
     report = world.app.restores.preflight(backup.backup_id, world.pg2.id, "x")
     assert report.can_proceed
-    assert any(c.severity is Severity.WARNING and "eski" in c.message for c in report.checks)
+    assert any(c.severity is Severity.WARNING and "older" in c.message for c in report.checks)
 
 
 def test_suggest_name(backup):

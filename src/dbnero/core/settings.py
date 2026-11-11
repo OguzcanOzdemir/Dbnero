@@ -37,6 +37,8 @@ class Settings:
     tool_paths: dict[str, str] = field(default_factory=dict)
     max_parallel_jobs: int = 2
     first_run_completed: bool = False
+    # "system", "light" or "dark"
+    theme: str = "system"
     # Refuse to start a backup when the archive volume would drop below this.
     min_free_space_mb: int = 1024
     # Warn on the overview page when the archive volume is fuller than this.

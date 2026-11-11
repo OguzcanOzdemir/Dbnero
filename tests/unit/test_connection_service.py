@@ -29,7 +29,7 @@ def test_validation(world):
     with pytest.raises(ValidationError):
         svc.save(bad)
     dup = ConnectionProfile(name="PG", engine=Engine.MYSQL, host="h", port=1, username="u")
-    with pytest.raises(ValidationError, match="zaten var"):
+    with pytest.raises(ValidationError, match="already exists"):
         svc.save(dup)
     win = ConnectionProfile(
         name="w", engine=Engine.MYSQL, host="h", port=1, auth_type=AuthType.WINDOWS

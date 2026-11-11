@@ -21,7 +21,7 @@ from dbnero.compare.schema_diff import SchemaDiff
 from dbnero.core.models import utc_now
 
 SENSITIVE_WARNING = (
-    "Bu rapor veritabanı satırlarından örnek veriler içerir ve hassas bilgi barındırabilir."
+    "This report contains sample rows from the databases and may include sensitive data."
 )
 
 
@@ -158,10 +158,10 @@ def export_html(report: CompareReport, path: Path, include_row_data: bool = Fals
     e = html.escape
     data = report_to_dict(report, include_row_data)
     parts = [
-        "<!doctype html><html lang='tr'><head><meta charset='utf-8'>",
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
         f"<title>{e(report.title)}</title><style>{_CSS}</style></head><body>",
         f"<h1>{e(report.title)}</h1>",
-        f"<p>Oluşturma: {e(data['created_at_utc'])} · {e(data['generated_by'])}</p>",
+        f"<p>Created {e(data['created_at_utc'])} · {e(data['generated_by'])}</p>",
     ]
     if include_row_data:
         parts.append(f"<div class='warn'>{e(SENSITIVE_WARNING)}</div>")
@@ -171,15 +171,15 @@ def export_html(report: CompareReport, path: Path, include_row_data: bool = Fals
     if "schema" in data:
         s = data["schema"]
         status = (
-            "<span class='ok'>Aynı</span>"
+            "<span class='ok'>Identical</span>"
             if s["identical"]
-            else (f"<span class='bad'>{len(s['items'])} fark</span>")
+            else (f"<span class='bad'>{len(s['items'])} differences</span>")
         )
-        parts.append(f"<h2>Şema: {e(s['left'])} ↔ {e(s['right'])} — {status}</h2>")
+        parts.append(f"<h2>Schema: {e(s['left'])} ↔ {e(s['right'])} — {status}</h2>")
         if s["items"]:
             parts.append(
-                "<table><tr><th>Kategori</th><th>Değişim</th><th>Nesne</th><th>Ayrıntı</th>"
-                "<th>Sol</th><th>Sağ</th></tr>"
+                "<table><tr><th>Category</th><th>Change</th><th>Object</th><th>Detail</th>"
+                "<th>Left</th><th>Right</th></tr>"
             )
             for i in s["items"]:
                 parts.append(
@@ -192,15 +192,15 @@ def export_html(report: CompareReport, path: Path, include_row_data: bool = Fals
 
     if "data" in data:
         d = data["data"]
-        parts.append(f"<h2>Veri: {e(d['left'])} ↔ {e(d['right'])}</h2>")
+        parts.append(f"<h2>Data: {e(d['left'])} ↔ {e(d['right'])}</h2>")
         parts.append(
-            "<table><tr><th>Tablo</th><th>Yöntem</th><th>Sol satır</th><th>Sağ satır</th>"
-            "<th>Eklenen</th><th>Silinen</th><th>Değişen</th><th>Sonuç</th><th>Not</th></tr>"
+            "<table><tr><th>Table</th><th>Method</th><th>Left rows</th><th>Right rows</th>"
+            "<th>Added</th><th>Removed</th><th>Changed</th><th>Result</th><th>Note</th></tr>"
         )
         for t in d["tables"]:
             res = {
-                True: "<span class='ok'>Aynı</span>",
-                False: "<span class='bad'>Farklı</span>",
+                True: "<span class='ok'>Identical</span>",
+                False: "<span class='bad'>Different</span>",
                 None: "?",
             }[t["identical"]]
             parts.append(
@@ -212,7 +212,7 @@ def export_html(report: CompareReport, path: Path, include_row_data: bool = Fals
         parts.append("</table>")
         if d["skipped_tables"]:
             parts.append(
-                "<p>Yalnızca bir tarafta bulunan tablolar (veri karşılaştırılmadı): "
+                "<p>Tables present on one side only (data not compared): "
                 + e(", ".join(d["skipped_tables"]))
                 + "</p>"
             )
@@ -220,8 +220,8 @@ def export_html(report: CompareReport, path: Path, include_row_data: bool = Fals
             for t in d["tables"]:
                 if not t.get("samples"):
                     continue
-                parts.append(f"<h3>{e(t['table'])} — örnek satırlar</h3><table>")
-                parts.append("<tr><th>Değişim</th><th>Anahtar</th><th>Sol</th><th>Sağ</th></tr>")
+                parts.append(f"<h3>{e(t['table'])} — sample rows</h3><table>")
+                parts.append("<tr><th>Change</th><th>Key</th><th>Left</th><th>Right</th></tr>")
                 for smp in t["samples"]:
                     parts.append(
                         f"<tr><td class='{e(smp['kind'])}'>{e(smp['kind'])}</td>"

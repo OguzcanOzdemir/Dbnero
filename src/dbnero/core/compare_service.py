@@ -28,8 +28,8 @@ TEMP_DB_PREFIX = "dbnero_tmp_"
 class SnapshotMissing(Exception):
     def __init__(self, record: BackupRecord) -> None:
         super().__init__(
-            f"Yedeğin ({record.database_name}, {record.short_id}) şema anlık görüntüsü yok; "
-            "doğrudan şema karşılaştırması yapılamaz"
+            f"Backup {record.database_name} ({record.short_id}) has no schema snapshot, "
+            "so its schema cannot be compared directly"
         )
 
 
@@ -44,7 +44,7 @@ class LiveSide:
 
 
 def backup_label(record: BackupRecord) -> str:
-    return f"yedek {record.database_name} @ {record.created_at_utc:%Y-%m-%d %H:%M} UTC"
+    return f"backup {record.database_name} @ {record.created_at_utc:%Y-%m-%d %H:%M} UTC"
 
 
 class CompareService:
@@ -68,7 +68,7 @@ class CompareService:
 
     def _check_engines(self, *engines: object) -> None:
         if len(set(engines)) > 1:
-            raise EngineMismatch("Yalnızca aynı motora ait kaynaklar karşılaştırılabilir")
+            raise EngineMismatch("Only sources of the same database engine can be compared")
 
     def schema_backup_vs_live(
         self, backup_id: str, live: LiveSide, options: DiffOptions | None = None
@@ -124,7 +124,7 @@ class CompareService:
         self._check_engines(record.engine, profile.engine)
         adapter = self.connections.adapter_for(profile)
         temp_name = f"{TEMP_DB_PREFIX}{record.short_id}_{uuid.uuid4().hex[:6]}"
-        emit("INFO", f"Yedek geçici veritabanına yükleniyor: {temp_name} ({profile.name})")
+        emit("INFO", f"Restoring backup into temporary database {temp_name} ({profile.name})")
         try:
             adapter.restore(
                 record.file_path,
@@ -140,9 +140,9 @@ class CompareService:
         finally:
             try:
                 adapter.drop_database(temp_name)
-                emit("INFO", f"Geçici veritabanı silindi: {temp_name}")
+                emit("INFO", f"Temporary database dropped: {temp_name}")
             except Exception as exc:  # report, but don't mask the real error
-                emit("WARNING", f"Geçici veritabanı silinemedi ({temp_name}): {exc}")
+                emit("WARNING", f"Could not drop temporary database {temp_name}: {exc}")
 
     def data_live_vs_live(
         self,

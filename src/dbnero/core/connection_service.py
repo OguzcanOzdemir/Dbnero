@@ -38,27 +38,27 @@ class EngineToolReport:
 
 INSTALL_HINTS: dict[Engine, dict[str, str]] = {
     Engine.POSTGRESQL: {
-        "windows": "PostgreSQL kurulum paketindeki 'Command Line Tools' bileşenini kurun "
-        "(https://www.postgresql.org/download/windows/) ve bin klasörünü PATH'e ekleyin "
-        "veya Ayarlar'dan yolunu gösterin.",
+        "windows": "Install the 'Command Line Tools' component of the PostgreSQL installer "
+        "(https://www.postgresql.org/download/windows/) and add its bin folder to PATH, "
+        "or point to it in Settings.",
         "darwin": "brew install libpq && brew link --force libpq",
         "linux": "Debian/Ubuntu: sudo apt install postgresql-client; "
         "RHEL/Fedora: sudo dnf install postgresql",
     },
     Engine.MYSQL: {
-        "windows": "MySQL Installer ile 'MySQL Shell/Client Programs' kurun veya "
-        "MySQL Server ZIP paketindeki bin klasörünü Ayarlar'dan gösterin.",
+        "windows": "Install the client programs with MySQL Installer, or point Settings "
+        "to the bin folder of the MySQL Server ZIP package.",
         "darwin": "brew install mysql-client",
         "linux": "Debian/Ubuntu: sudo apt install mysql-client; "
         "RHEL/Fedora: sudo dnf install mysql",
     },
     Engine.MSSQL: {
-        "windows": "Microsoft ODBC Driver 18 for SQL Server'ı kurun "
+        "windows": "Install Microsoft ODBC Driver 18 for SQL Server "
         "(https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server).",
         "darwin": "brew tap microsoft/mssql-release && "
         "HOMEBREW_ACCEPT_EULA=Y brew install msodbcsql18",
-        "linux": "https://learn.microsoft.com/sql/connect/odbc/linux-mac/"
-        "installing-the-microsoft-odbc-driver-for-sql-server adımlarıyla msodbcsql18 kurun.",
+        "linux": "Install msodbcsql18 as described at https://learn.microsoft.com/sql/connect/"
+        "odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server",
     },
 }
 
@@ -85,15 +85,15 @@ class ConnectionService:
     @staticmethod
     def validate(profile: ConnectionProfile) -> None:
         if not profile.name.strip():
-            raise ValidationError("Bağlantı adı boş olamaz")
+            raise ValidationError("Name is required")
         if not profile.host.strip():
-            raise ValidationError("Sunucu adresi boş olamaz")
+            raise ValidationError("Host is required")
         if not (0 < profile.port < 65536):
-            raise ValidationError("Port 1-65535 aralığında olmalı")
+            raise ValidationError("Port must be between 1 and 65535")
         if profile.auth_type is AuthType.WINDOWS and profile.engine is not Engine.MSSQL:
-            raise ValidationError("Windows kimlik doğrulaması yalnızca SQL Server için geçerlidir")
+            raise ValidationError("Windows authentication is only available for SQL Server")
         if profile.auth_type is AuthType.PASSWORD and not profile.username.strip():
-            raise ValidationError("Kullanıcı adı boş olamaz")
+            raise ValidationError("User name is required")
 
     def save(self, profile: ConnectionProfile, password: str | None = None) -> None:
         """Save a profile. ``password=None`` keeps the stored password; ``""`` clears it."""
@@ -102,7 +102,7 @@ class ConnectionService:
             c.name.casefold() == profile.name.casefold() and c.id != profile.id
             for c in self.catalog.list_connections()
         ):
-            raise ValidationError(f"'{profile.name}' adında bir bağlantı zaten var")
+            raise ValidationError(f"A connection named '{profile.name}' already exists")
         self.catalog.save_connection(profile)
         if password is not None:
             if password:
