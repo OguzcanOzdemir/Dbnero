@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,15 +32,66 @@ class ToolInfo:
         return self.path is not None
 
 
+def bundled_tools_dir() -> Path | None:
+    """Folder with client tools shipped inside the packaged app, if any."""
+    override = os.environ.get("DBNERO_TOOLS_DIR")
+    exe_dir = Path(sys.executable).resolve().parent
+    candidates = [
+        Path(override) if override else None,
+        exe_dir / "tools",  # Windows / Linux one-folder build
+        exe_dir.parent / "Resources" / "tools",  # macOS .app bundle
+        Path(getattr(sys, "_MEIPASS", exe_dir)) / "tools",
+    ]
+    for c in candidates:
+        if c is not None and c.is_dir():
+            return c
+    return None
+
+
+def _executable(name: str) -> str:
+    return f"{name}.exe" if sys.platform == "win32" else name
+
+
+def bundled_tool(name: str) -> Path | None:
+    root = bundled_tools_dir()
+    if root is None:
+        return None
+    for path in sorted(root.glob(f"*/bin/{_executable(name)}")):
+        if path.is_file():
+            return path
+    return None
+
+
+def tool_candidates(name: str, override: str | os.PathLike[str] | None = None) -> list[Path]:
+    """Every usable copy of a tool, in preference order: the path set in
+    Settings, the copy bundled with dbnero, then the one on PATH."""
+    found: list[Path] = []
+    if override:
+        candidate = Path(override)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            found.append(candidate)
+    bundled = bundled_tool(name)
+    if bundled is not None:
+        found.append(bundled)
+    on_path = shutil.which(name)
+    if on_path:
+        found.append(Path(on_path))
+    unique: list[Path] = []
+    for p in found:
+        if p not in unique:
+            unique.append(p)
+    return unique
+
+
 def find_tool(name: str, override: str | os.PathLike[str] | None = None) -> Path | None:
-    """Locate a tool, preferring a user-configured path from settings."""
+    """The preferred copy of a tool (see ``tool_candidates``)."""
     if override:
         candidate = Path(override)
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
         return None
-    found = shutil.which(name)
-    return Path(found) if found else None
+    candidates = tool_candidates(name)
+    return candidates[0] if candidates else None
 
 
 def parse_version(output: str) -> str | None:

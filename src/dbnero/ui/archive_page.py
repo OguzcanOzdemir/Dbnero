@@ -103,10 +103,9 @@ class ArchivePage(Page):
         self.status.addItem("Any status", "")
         for s, label in BACKUP_STATUS_TEXT.items():
             self.status.addItem(label, s.value)
-        self.tag = QLineEdit()
-        self.tag.setPlaceholderText("Tag")
-        self.tag.setFixedWidth(110)
-        self.tag.returnPressed.connect(self.reload)
+        self.tag = QComboBox()
+        self.tag.addItem("Any tag", "")
+        self.tag.setMinimumWidth(110)
         self.use_dates = QCheckBox("From")
         self.date_from = QDateEdit(QDate.currentDate().addMonths(-1))
         self.date_to = QDateEdit(QDate.currentDate())
@@ -117,7 +116,7 @@ class ArchivePage(Page):
             d.dateChanged.connect(self.reload)
             self.use_dates.toggled.connect(d.setEnabled)
         self.use_dates.toggled.connect(self.reload)
-        for combo in (self.engine, self.status):
+        for combo in (self.engine, self.status, self.tag):
             combo.currentIndexChanged.connect(self.reload)
         filters.addWidget(self.text, 1)
         for w in (
@@ -198,7 +197,7 @@ class ArchivePage(Page):
             text=self.text.text().strip() or None,
             engine=Engine(engine) if engine else None,
             status=BackupStatus(status) if status else None,
-            tag=self.tag.text().strip() or None,
+            tag=self.tag.currentData() or None,
         )
         if self.use_dates.isChecked():
             start = datetime.combine(self.date_from.date().toPython(), time.min)  # type: ignore[arg-type]
@@ -207,7 +206,18 @@ class ArchivePage(Page):
             flt.created_to = end.astimezone().astimezone(UTC)
         return flt
 
+    def _refresh_tags(self) -> None:
+        current = self.tag.currentData()
+        self.tag.blockSignals(True)
+        self.tag.clear()
+        self.tag.addItem("Any tag", "")
+        for tag in self.app.catalog.list_tags():
+            self.tag.addItem(tag, tag)
+        self.tag.setCurrentIndex(max(self.tag.findData(current), 0))
+        self.tag.blockSignals(False)
+
     def reload(self) -> None:
+        self._refresh_tags()
         selected = self.selected()
         self._records = self.app.catalog.list_backups(self.current_filter())
         self.table.setSortingEnabled(False)

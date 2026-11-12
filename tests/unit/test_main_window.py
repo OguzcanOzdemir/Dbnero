@@ -74,8 +74,7 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     archive = window.archive
     archive.reload()
     assert archive.table.rowCount() == 2
-    archive.tag.setText("ui")
-    archive.reload()
+    archive.tag.setCurrentIndex(archive.tag.findData("ui"))
     assert archive.table.rowCount() == 2
     archive.table.selectRow(0)
     rec = archive.selected()
@@ -91,6 +90,10 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     restore = window.restore
     assert restore.backup.currentData() == rec.backup_id
     restore.target_conn.setCurrentIndex(restore.target_conn.findData(world.pg2.id))
+    qtbot.waitUntil(lambda: not restore._loading, timeout=5000)
+    # pg2 is empty, so the original name is proposed for the new database.
+    assert restore.as_new.isChecked()
+    assert restore.target_db.text() == rec.database_name
     restore.target_db.setText("restored_db")
     restore.run_preflight()
     qtbot.waitUntil(lambda: restore._report is not None, timeout=5000)
@@ -100,11 +103,13 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     qtbot.waitUntil(lambda: "Restore finished" in restore.status.text(), timeout=5000)
     assert "restored_db" in world.servers["pg2"].databases
 
-    # Overwrite path requires typing the name.
+    # Replacing an existing database: pick it from the list, then type its name.
     restore.select_backup(rec.backup_id)
     restore.target_conn.setCurrentIndex(restore.target_conn.findData(world.pg2.id))
-    restore.target_db.setText("restored_db")
+    qtbot.waitUntil(lambda: not restore._loading, timeout=5000)
+    assert restore.replace_db.findText("restored_db") >= 0
     restore.overwrite.setChecked(True)
+    restore.replace_db.setCurrentText("restored_db")
     restore.run_preflight()
     qtbot.waitUntil(lambda: restore._report is not None, timeout=5000)
     assert restore._report.target_exists and not restore.confirm.isHidden()
@@ -112,12 +117,19 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     restore.confirm.setText("restored_db")
     assert restore.btn_start.isEnabled()
 
+    # A name that already exists is flagged for a new database.
+    restore.as_new.setChecked(True)
+    restore.target_db.setText("restored_db")
+    assert "already exists" in restore.name_hint.text()
+
     # Compare backup with live database
     window.archive.select_backup(rec.backup_id)
     window.archive.btn_compare.click()
     assert window.current_page_key() == "compare"
     cmp = window.compare
     cmp.right.preselect_live(world.pg.id, rec.database_name)
+    qtbot.waitUntil(lambda: cmp.right.database.currentText() == rec.database_name, timeout=5000)
+    assert not cmp.right.database.isEditable()
     cmp.include_data.setChecked(True)
     cmp.scratch.setCurrentIndex(cmp.scratch.findData(world.pg2.id))
     cmp.run()

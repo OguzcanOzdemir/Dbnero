@@ -81,6 +81,66 @@ jobs:
         run: echo "VERSION=$(python -c 'import dbnero; print(dbnero.__version__)')" >> "$GITHUB_ENV"
       - run: pyinstaller --noconfirm packaging/dbnero.spec
 
+      # Ship pg_dump/pg_restore and mysqldump/mysql inside the app so users do
+      # not have to install database client tools themselves.
+      - name: Bundle database tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pgBin = $null
+          try {
+            $versions = Invoke-RestMethod https://www.postgresql.org/versions.json
+            $latest = $versions | Where-Object { $_.current -eq $true } | Select-Object -First 1
+            $ver = "$($latest.major).$($latest.latestMinor)"
+            Invoke-WebRequest "https://get.enterprisedb.com/postgresql/postgresql-$ver-1-windows-x64-binaries.zip" -OutFile pg.zip
+            Expand-Archive pg.zip -DestinationPath pgzip
+            $pgBin = "pgzip/pgsql/bin"
+          } catch {
+            Write-Host "EDB download failed ($_); using the runner's PostgreSQL"
+            $pgBin = (Get-ChildItem "C:/Program Files/PostgreSQL" -Directory | Sort-Object { [int]$_.Name } | Select-Object -Last 1).FullName + "/bin"
+          }
+          $mysqlBin = $null
+          if (Test-Path "C:/Program Files/MySQL") {
+            $mysqlBin = (Get-ChildItem "C:/Program Files/MySQL" -Directory | Where-Object { Test-Path "$($_.FullName)/bin/mysqldump.exe" } | Sort-Object Name | Select-Object -Last 1).FullName + "/bin"
+          }
+          if (-not $mysqlBin -or -not (Test-Path "$mysqlBin/mysqldump.exe")) {
+            choco install mysql --no-progress -y
+            $mysqlBin = "C:/tools/mysql/current/bin"
+          }
+          python packaging/bundle_tools.py dist/dbnero/tools "postgresql=$pgBin" "mysql=$mysqlBin"
+          & dist/dbnero/tools/postgresql/bin/pg_dump.exe --version
+          & dist/dbnero/tools/postgresql/bin/pg_restore.exe --version
+          & dist/dbnero/tools/mysql/bin/mysqldump.exe --version
+          & dist/dbnero/tools/mysql/bin/mysql.exe --version
+
+      - name: Bundle database tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libpq mysql-client dylibbundler
+          TOOLS=dist/dbnero.app/Contents/Resources/tools
+          python packaging/bundle_tools.py "$TOOLS" \
+            "postgresql=$(brew --prefix libpq)/bin" "mysql=$(brew --prefix mysql-client)/bin"
+          find "$TOOLS" -type f \( -perm -u+x -o -name '*.dylib' \) -exec codesign --force -s - {} \;
+          codesign --force --deep -s - dist/dbnero.app
+          for t in postgresql/bin/pg_dump postgresql/bin/pg_restore mysql/bin/mysqldump mysql/bin/mysql; do
+            env -u DYLD_LIBRARY_PATH "$TOOLS/$t" --version
+          done
+
+      - name: Bundle database tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common patchelf mysql-client
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          PG=$(apt-cache search --names-only '^postgresql-client-[0-9]+$' | awk '{print $1}' | sort -V | tail -1)
+          sudo apt-get install -y "$PG"
+          PGBIN=/usr/lib/postgresql/${PG##*-}/bin
+          python packaging/bundle_tools.py dist/dbnero/tools "postgresql=$PGBIN" mysql=/usr/bin
+          for t in postgresql/bin/pg_dump postgresql/bin/pg_restore mysql/bin/mysqldump mysql/bin/mysql; do
+            dist/dbnero/tools/$t --version
+          done
+
       - name: Windows installer and portable zip
         if: runner.os == 'Windows'
         shell: pwsh

@@ -129,8 +129,25 @@ def _check_icon(color: str) -> str:
     return path.as_posix()
 
 
+def _chevron_icon(color: str) -> str:
+    """Write a down-chevron SVG for combo boxes and return its path."""
+    directory = Path(tempfile.gettempdir()) / "dbnero-theme"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"chevron-{color.lstrip('#')}.svg"
+    if not path.exists():
+        path.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+            '<path d="M4 6l4 4 4-4" '
+            f'fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round"/></svg>',
+            "utf-8",
+        )
+    return path.as_posix()
+
+
 def stylesheet(t: Tokens) -> str:
     check = _check_icon(t.accent_text)
+    chevron = _chevron_icon(t.text_muted)
     return f"""
 * {{ outline: none; }}
 QWidget {{ color: {t.text}; font-size: 10pt; }}
@@ -175,7 +192,14 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus, QDateTimeEdit
 QPlainTextEdit:focus {{ border: 1px solid {t.accent}; }}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {t.text_muted};
     background: {t.surface_alt}; }}
-QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox {{ padding-right: 28px; }}
+QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: center right; border: none;
+    width: 26px; }}
+QComboBox::down-arrow, QDateEdit::down-arrow, QDateTimeEdit::down-arrow {{
+    image: url("{chevron}"); width: 14px; height: 14px; }}
+QComboBox::down-arrow:disabled {{ image: none; }}
+QComboBox:hover, QDateEdit:hover, QDateTimeEdit:hover {{ border: 1px solid {t.text_muted}; }}
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0; border: none; }}
 QComboBox QAbstractItemView {{ background: {t.surface}; border: 1px solid {t.border};
     selection-background-color: {t.accent_soft}; selection-color: {t.text}; }}

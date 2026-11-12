@@ -19,7 +19,7 @@ from dbnero.adapters.base import (
 )
 from dbnero.adapters.identifiers import quote_identifier
 from dbnero.adapters.process import ProcessFailed, run_tool
-from dbnero.adapters.tools import find_tool, tool_version
+from dbnero.adapters.tools import find_tool, tool_candidates, tool_version
 from dbnero.compare.snapshots import (
     Column,
     ForeignKey,
@@ -116,6 +116,20 @@ class PostgreSQLAdapter:
             raise ToolNotFound(name)
         return path
 
+    def _pick_pg_dump(self, server_version: str) -> tuple[Path, str, list[str]]:
+        """First pg_dump (Settings, bundled, PATH) that is new enough for the server."""
+        candidates = tool_candidates("pg_dump", self._tool_paths.get("pg_dump"))
+        if not candidates:
+            raise ToolNotFound("pg_dump")
+        problems: list[str] = []
+        for path in candidates:
+            version = tool_version(path) or ""
+            warnings = _version_warnings(version, server_version, "pg_dump")
+            if not any(w.startswith("ERROR") for w in warnings):
+                return path, version, warnings
+            problems.append(warnings[0].removeprefix("ERROR: "))
+        raise AdapterError(problems[0])
+
     # -- protocol -------------------------------------------------------
 
     def backup_format(self, options: dict[str, Any]) -> tuple[str, str]:
@@ -184,12 +198,8 @@ class PostgreSQLAdapter:
         options: dict[str, Any],
         ctx: JobContext | None = None,
     ) -> BackupResult:
-        pg_dump = self._tool("pg_dump")
         server_version = self.test_connection()
-        dump_version = tool_version(pg_dump) or ""
-        warnings = _version_warnings(dump_version, server_version, "pg_dump")
-        if any(w.startswith("ERROR") for w in warnings):
-            raise AdapterError(warnings[0].removeprefix("ERROR: "))
+        pg_dump, dump_version, warnings = self._pick_pg_dump(server_version)
 
         args: list[str | Path] = [
             pg_dump,

@@ -412,6 +412,14 @@ class Catalog:
             rows = conn.execute(query).all()
         return [_row_to_backup(r) for r in rows]
 
+    def list_tags(self) -> list[str]:
+        """Every tag used by any backup, sorted case-insensitively."""
+        with self._tx() as conn:
+            rows = conn.exec_driver_sql(
+                "SELECT DISTINCT j.value FROM backups, json_each(backups.tags) AS j"
+            ).all()
+        return sorted({str(r[0]) for r in rows if r[0]}, key=str.casefold)
+
     def delete_backup(self, backup_id: str) -> None:
         with self._tx() as conn:
             conn.execute(delete(backups_t).where(backups_t.c.backup_id == backup_id))

@@ -44,7 +44,7 @@ def test_pg_version_warnings():
 def test_pg_backup_never_puts_password_in_argv(monkeypatch, tmp_path):
     calls: list[dict[str, Any]] = []
     adapter = pg_mod.PostgreSQLAdapter(_profile(Engine.POSTGRESQL), "S3cret!")
-    monkeypatch.setattr(adapter, "_tool", lambda name: Path(f"/usr/bin/{name}"))
+    monkeypatch.setattr(pg_mod, "tool_candidates", lambda name, o=None: [Path(f"/usr/bin/{name}")])
     monkeypatch.setattr(adapter, "test_connection", lambda: "16.2")
     monkeypatch.setattr(pg_mod, "tool_version", lambda p: "16.4")
     monkeypatch.setattr(pg_mod, "run_tool", lambda args, **kw: calls.append({"args": args, **kw}))
@@ -60,7 +60,7 @@ def test_pg_backup_never_puts_password_in_argv(monkeypatch, tmp_path):
 
 def test_pg_backup_refuses_old_pg_dump(monkeypatch, tmp_path):
     adapter = pg_mod.PostgreSQLAdapter(_profile(Engine.POSTGRESQL), None)
-    monkeypatch.setattr(adapter, "_tool", lambda name: Path(name))
+    monkeypatch.setattr(pg_mod, "tool_candidates", lambda name, o=None: [Path(name)])
     monkeypatch.setattr(adapter, "test_connection", lambda: "17.1")
     monkeypatch.setattr(pg_mod, "tool_version", lambda p: "15.0")
     with pytest.raises(AdapterError, match="older than server"):
@@ -273,3 +273,12 @@ def test_tools_run_without_console_window_flag():
     from dbnero.adapters import process
 
     assert isinstance(process.NO_WINDOW, int)
+
+
+def test_pg_picks_first_pg_dump_new_enough(monkeypatch, tmp_path):
+    adapter = pg_mod.PostgreSQLAdapter(_profile(Engine.POSTGRESQL), None)
+    old, new = Path("/bundled/pg_dump"), Path("/usr/bin/pg_dump")
+    monkeypatch.setattr(pg_mod, "tool_candidates", lambda name, o=None: [old, new])
+    monkeypatch.setattr(pg_mod, "tool_version", lambda p: "15.0" if p == old else "17.2")
+    path, version, warnings = adapter._pick_pg_dump("17.1")
+    assert path == new and version == "17.2" and warnings == []

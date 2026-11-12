@@ -227,3 +227,9 @@ def test_mark_interrupted_backups(catalog):
     assert catalog.mark_interrupted_backups() == 1
     assert catalog.get_backup(running.backup_id).status is m.BackupStatus.FAILED
     assert catalog.get_backup(done.backup_id).status is m.BackupStatus.SUCCEEDED
+
+
+def test_list_tags(catalog):
+    catalog.add_backup(_backup(tags=["prod", "Weekly"]))
+    catalog.add_backup(_backup(db="erp", tags=["prod", "adhoc"]))
+    assert catalog.list_tags() == ["adhoc", "prod", "Weekly"]

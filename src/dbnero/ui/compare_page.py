@@ -97,8 +97,10 @@ class SourcePicker(Card):
         self.backup = QComboBox()
         self.connection = QComboBox()
         self.database = QComboBox()
-        self.database.setEditable(True)
-        self.connection.currentIndexChanged.connect(self._load_databases)
+        self.database.setPlaceholderText("Choose a database")
+        self._wanted_db: str | None = None
+        self._loaded_conn: str | None = None
+        self.connection.currentIndexChanged.connect(lambda _i: self._load_databases(force=True))
         self.backup_label = QLabel("Backup")
         self.conn_label = QLabel("Server")
         self.db_label = QLabel("Database")
@@ -133,23 +135,42 @@ class SourcePicker(Card):
             self.connection.addItem(f"{p.name} · {p.engine.display_name}", p.id)
         self.connection.setCurrentIndex(max(self.connection.findData(current_conn), 0))
         self.connection.blockSignals(False)
-        self._load_databases()
+        self._load_databases(force=True)
 
-    def _load_databases(self) -> None:
+    def _load_databases(self, force: bool = False) -> None:
         conn_id = self.connection.currentData()
         if not conn_id or self.connection.isHidden():
             return
-        current = self.database.currentText()
+        if not force and conn_id == self._loaded_conn and self.database.count():
+            return  # already listed for this server; keep the selection
+        self._loaded_conn = conn_id
+        wanted = self._wanted_db or self.database.currentText()
+        self.database.clear()
+        self.database.setPlaceholderText("Loading databases…")
+        self.database.setEnabled(False)
 
         def ok(names: list[str]) -> None:
             if self.connection.currentData() != conn_id:
                 return
             self.database.clear()
             self.database.addItems(names)
-            if current in names:
-                self.database.setCurrentText(current)
+            self.database.setEnabled(bool(names))
+            self.database.setPlaceholderText(
+                "Choose a database" if names else "No databases on this server"
+            )
+            if wanted in names:
+                self.database.setCurrentText(wanted)
+            elif names:
+                self.database.setCurrentIndex(0)
+            self._wanted_db = None
 
-        run_async(lambda: self.app.connections.list_databases(conn_id), ok, lambda e: None)
+        def fail(exc: BaseException) -> None:
+            if self.connection.currentData() != conn_id:
+                return
+            self.database.setPlaceholderText("Could not connect to this server")
+            self.database.setToolTip(error_text(exc))
+
+        run_async(lambda: self.app.connections.list_databases(conn_id), ok, fail)
 
     def live_side(self) -> LiveSide | None:
         conn_id = self.connection.currentData()
@@ -157,10 +178,16 @@ class SourcePicker(Card):
         return LiveSide(conn_id, db) if conn_id and db else None
 
     def preselect_live(self, connection_id: str, database: str) -> None:
+        self._wanted_db = database
         idx = self.connection.findData(connection_id)
-        if idx >= 0:
-            self.connection.setCurrentIndex(idx)
-        self.database.setCurrentText(database)
+        if idx >= 0 and idx != self.connection.currentIndex():
+            self.connection.setCurrentIndex(idx)  # triggers a reload that selects it
+        else:
+            if self.database.findText(database) >= 0:
+                self.database.setCurrentText(database)
+                self._wanted_db = None
+            else:
+                self._load_databases(force=True)
 
 
 class ComparePage(Page):

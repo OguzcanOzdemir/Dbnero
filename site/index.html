@@ -312,7 +312,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
   <div class="wrap">
     <p class="eyebrow">Databases</p>
     <h2>Uses each engine's own tools</h2>
-    <p class="lead" style="margin-top:12px">dbnero never invents a backup format. It drives the tools your database already trusts.</p>
+    <p class="lead" style="margin-top:12px">dbnero never invents a backup format. It drives the tools your database already trusts, and ships them with the app.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Engine</th><th>Backup</th><th>Restore</th><th>File</th><th>Server versions</th></tr></thead>
@@ -353,13 +353,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
 
     <div class="after">
       <div>
-        <h3>Install your database tools</h3>
-        <ul>
-          <li>PostgreSQL: <code>pg_dump</code> and <code>pg_restore</code>, same version as the server or newer</li>
-          <li>MySQL: <code>mysqldump</code> and <code>mysql</code></li>
-          <li>SQL Server: Microsoft ODBC Driver 18</li>
-        </ul>
-        <p style="margin-top:8px">dbnero checks for them on first start and tells you what is missing.</p>
+        <h3>Nothing else to install</h3>
+        <p>The PostgreSQL and MySQL client tools (<code>pg_dump</code>, <code>pg_restore</code>, <code>mysqldump</code>, <code>mysql</code>) are included. SQL Server uses the ODBC driver built into Windows; on macOS and Linux install Microsoft ODBC Driver 18 if you back up SQL Server.</p>
       </div>
       <div>
         <h3>Verify your download</h3>

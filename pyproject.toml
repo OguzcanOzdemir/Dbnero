@@ -59,6 +59,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 # Adapters build SQL only from identifiers passed through quote_identifier()
 # or literals escaped by engine helpers; values use bound parameters.
 "src/dbnero/adapters/*" = ["S608"]
+# Build-time packaging scripts run fixed tools on files we just built.
+"packaging/*" = ["S603", "S103"]
 "tests/**" = ["S101", "S105", "S106", "S108"]
 
 [tool.mypy]

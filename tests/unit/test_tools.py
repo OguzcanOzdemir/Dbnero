@@ -40,3 +40,21 @@ def test_list_odbc_drivers_survives_broken_driver_manager(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     assert list_odbc_drivers() == []
+
+
+def test_bundled_tools_are_found_before_path(tmp_path, monkeypatch):
+    from dbnero.adapters import tools
+
+    exe = "pg_dump.exe" if sys.platform == "win32" else "pg_dump"
+    bundled = tmp_path / "postgresql" / "bin" / exe
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("#!/bin/sh\n")
+    bundled.chmod(0o755)
+    monkeypatch.setenv("DBNERO_TOOLS_DIR", str(tmp_path))
+    monkeypatch.setattr(tools.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert tools.find_tool("pg_dump") == bundled
+    assert tools.tool_candidates("pg_dump") == [bundled, Path("/usr/bin/pg_dump")]
+    override = tmp_path / "custom"
+    override.write_text("x")
+    override.chmod(0o755)
+    assert tools.tool_candidates("pg_dump", override)[0] == override

@@ -68,8 +68,9 @@ def tool_report_html(reports: list[EngineToolReport], keyring_ok: bool) -> str:
         )
     )
     rows.append(
-        "<p>You only need the tools for the databases you use. For PostgreSQL, "
-        "<code>pg_dump</code> must be the same version as the server or newer.</p>"
+        "<p>dbnero ships with the PostgreSQL and MySQL client tools, so nothing needs to "
+        "be installed for them. SQL Server uses the ODBC driver of your system; Windows "
+        "includes one.</p>"
     )
     return "\n".join(rows)
 
@@ -198,7 +199,7 @@ class SettingsPage(Page):
         self.tool_edits: dict[str, QLineEdit] = {}
         for name in TOOL_NAMES:
             edit = QLineEdit(s.tool_paths.get(name, ""))
-            edit.setPlaceholderText("Found on PATH")
+            edit.setPlaceholderText("Automatic (bundled with dbnero)")
             r = QHBoxLayout()
             r.addWidget(edit, 1)
             r.addWidget(button("…", on_click=self._tool_browser(edit, name)))

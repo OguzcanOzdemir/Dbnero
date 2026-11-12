@@ -30,15 +30,9 @@ The builds are not code-signed yet:
 
 ### Database tools
 
-dbnero drives each engine's own tools. They are not bundled; install the ones you need:
+Nothing extra to install for PostgreSQL and MySQL: `pg_dump`, `pg_restore`, `mysqldump` and `mysql` ship inside the app. A tool path set in **Settings**, or a newer copy on your PATH, is used instead when needed (for example a PostgreSQL server newer than the bundled `pg_dump`).
 
-| Engine | Needed | Example |
-|---|---|---|
-| PostgreSQL | `pg_dump`, `pg_restore` (same version as the server or newer) | `apt install postgresql-client` · `brew install libpq` |
-| MySQL | `mysqldump`, `mysql` | `apt install mysql-client` · `brew install mysql-client` |
-| SQL Server | Microsoft ODBC Driver 18 | [Microsoft docs](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) |
-
-The app checks for them on first start, and you can point to them in **Settings**.
+SQL Server uses an ODBC driver. Windows already includes one. On macOS and Linux install [Microsoft ODBC Driver 18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) if you back up SQL Server.
 
 ## What it does
 

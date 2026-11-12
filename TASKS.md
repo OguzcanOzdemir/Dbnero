@@ -205,7 +205,13 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
   - [x] Türkçe karakterli arama (Unicode büyük/küçük harf)
   - [x] SQL Server SQL aktarımı dosyayı bir kez okuyor
   - [x] Arayüz veritabanı keşfini servis üzerinden yapıyor
-- [ ] GitHub Pages'in depo ayarlarından bir kez etkinleştirilmesi (Settings → Pages → Source: GitHub Actions)
+- [x] GitHub Pages etkinleştirildi
+- [x] PostgreSQL ve MySQL istemci araçları pakete gömülü (kullanıcı kurulum yapmaz); SQL Server için Windows'un gömülü ODBC sürücüsü
+- [x] Açılır listelerde ok işareti; Karşılaştır'da veritabanı listeden seçiliyor
+- [x] Geri Yükle: sunucu ve hedef seçimi ("yeni veritabanı" / "var olanın yerine" listeden), orijinal ad otomatik
+- [x] Yedekler: etiket filtresi listeden
+- [x] Windows 1312 (Kimlik Bilgisi Yöneticisi) çökmesi, konsol pencereleri, log klasörü yazılamazsa çökme düzeltildi
+- [ ] macOS/Linux için SQL Server ODBC sürücüsünü gömmek (sürücü sistem bileşeni; ileride saf-Python TDS sürücüsü değerlendirilebilir)
 - [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
 - [ ] macOS Intel derlemesi
 
