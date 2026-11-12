@@ -135,7 +135,23 @@ _V3 = [
     "CREATE INDEX ix_batches_schedule ON batches(schedule_id)",
 ]
 
-MIGRATIONS: list[list[str]] = [_V1, _V2, _V3]
+# v4: in-app notifications (missed or failed scheduled backups).
+_V4 = [
+    """
+    CREATE TABLE notifications (
+        id              TEXT PRIMARY KEY,
+        created_at_utc  TEXT NOT NULL,
+        level           TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        message         TEXT NOT NULL DEFAULT '',
+        schedule_id     TEXT,
+        read_at_utc     TEXT
+    )
+    """,
+    "CREATE INDEX ix_notifications_unread ON notifications(read_at_utc, created_at_utc)",
+]
+
+MIGRATIONS: list[list[str]] = [_V1, _V2, _V3, _V4]
 
 LATEST_VERSION = len(MIGRATIONS)
 

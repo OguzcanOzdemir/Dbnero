@@ -46,6 +46,9 @@ class Settings:
     # Retention policy (0 = disabled). Applied only after explicit confirmation.
     retention_keep_last: int = 0
     retention_max_age_days: int = 0
+    # Terms of Use / Privacy Policy version the user accepted, and when (UTC ISO).
+    legal_accepted_version: str = ""
+    legal_accepted_at: str = ""
     # Let the OS start dbnero for scheduled backups while the app is closed.
     background_schedules: bool = True
     # Default backup options per engine, e.g. {"mysql": {"compress": true}}.

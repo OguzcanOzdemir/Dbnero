@@ -184,6 +184,25 @@ class Schedule:
     last_message: str = ""
 
 
+class NotificationLevel(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    DANGER = "danger"
+
+
+@dataclass(slots=True)
+class Notification:
+    """Something the user should see next time they look at the app."""
+
+    title: str
+    message: str = ""
+    level: NotificationLevel = NotificationLevel.INFO
+    schedule_id: str | None = None
+    id: str = field(default_factory=new_id)
+    created_at_utc: datetime = field(default_factory=utc_now)
+    read_at_utc: datetime | None = None
+
+
 @dataclass(slots=True)
 class BackupResult:
     """Returned by an adapter after writing a backup file."""

@@ -24,7 +24,11 @@ a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT / "src")],
     hiddenimports=hidden,
-    datas=[(str(ROOT / "src" / "dbnero" / "ui" / "assets"), "dbnero/ui/assets")],
+    datas=[
+        (str(ROOT / "src" / "dbnero" / "ui" / "assets"), "dbnero/ui/assets"),
+        (str(ROOT / "src" / "dbnero" / "legal" / "TERMS.txt"), "dbnero/legal"),
+        (str(ROOT / "src" / "dbnero" / "legal" / "PRIVACY.txt"), "dbnero/legal"),
+    ],
     excludes=[
         "tkinter",
         "PySide6.QtWebEngineCore",

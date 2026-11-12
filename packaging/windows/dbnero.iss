@@ -24,7 +24,8 @@ UninstallDisplayIcon={app}\dbnero.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-LicenseFile=..\..\LICENSE
+; Users accept the Terms of Use (which build on the MIT license) during setup.
+LicenseFile=..\..\src\dbnero\legal\TERMS.txt
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked

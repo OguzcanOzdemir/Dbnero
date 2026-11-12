@@ -247,3 +247,85 @@ def test_open_app_runs_due_schedules(qtbot, window, world):
     _wait_jobs(qtbot, world.app)
     assert world.app.schedules.get(sched.id).last_status is ScheduleRunStatus.SUCCEEDED
     assert window.run_due_schedules() is None  # nothing due any more
+
+
+def test_missed_backup_notification_on_home(qtbot, window, world):
+    from datetime import UTC, datetime, timedelta
+
+    from dbnero.core.models import Schedule
+
+    # Daily at 02:00, created three days ago, never run: the app was closed.
+    world.app.schedules.save(
+        Schedule(
+            name="Nightly",
+            connection_id=world.pg.id,
+            databases=["crm"],
+            created_at_utc=datetime.now(UTC) - timedelta(days=3),
+        )
+    )
+    assert window.run_due_schedules() is not None
+    _wait_jobs(qtbot, world.app)
+    qtbot.wait(100)
+    # The window checks by itself when the job ends; each note is announced once.
+    assert window.check_notifications() == []
+    window._seen_notes.clear()
+    assert [n.title for n in window.check_notifications()] == ["Missed backup: Nightly"]
+    page = window.overview
+    assert not page.notes_card.isHidden()
+    assert "Missed backup: Nightly" in page.notes_box.itemAt(0).widget().label.text()
+    assert window.nav.item(window._row_for_key["overview"]).text() == "Home  (1)"
+    page.dismiss_notifications()
+    assert page.notes_card.isHidden()
+    assert window.nav.item(window._row_for_key["overview"]).text() == "Home"
+
+
+def test_legal_acceptance(qtbot, tmp_path, monkeypatch):
+    from dbnero import main as main_mod
+    from dbnero.core.settings import Settings
+    from dbnero.legal import LEGAL_VERSION, privacy_text, terms_text
+    from dbnero.ui.legal_dialog import LegalDialog
+
+    monkeypatch.setattr(main_mod, "settings_path", lambda: tmp_path / "settings.json")
+    s = Settings()
+
+    class Decline:
+        def __init__(self, require_acceptance):
+            assert require_acceptance
+
+        def exec(self):
+            return 0
+
+    class Accept(Decline):
+        def exec(self):
+            return 1
+
+    assert not main_mod.ensure_legal_accepted(s, Decline)
+    assert s.legal_accepted_version == ""
+    assert main_mod.ensure_legal_accepted(s, Accept)
+    assert s.legal_accepted_version == LEGAL_VERSION and s.legal_accepted_at
+    assert (tmp_path / "settings.json").exists()
+    # Asked only once per version.
+    assert main_mod.ensure_legal_accepted(s, Decline)
+
+    dlg = LegalDialog(require_acceptance=True)
+    qtbot.addWidget(dlg)
+    assert not dlg.btn_accept.isEnabled()
+    dlg.accept_box.setChecked(True)
+    assert dlg.btn_accept.isEnabled()
+    assert "not liable for any loss of data" in terms_text()
+    assert "does not collect" in privacy_text()
+
+
+def test_site_legal_pages_match_app_text():
+    import html
+    from pathlib import Path
+
+    from dbnero.legal import privacy_text, terms_text
+
+    site = Path(__file__).resolve().parents[2] / "site"
+    for page, text in (("terms.html", terms_text()), ("privacy.html", privacy_text())):
+        html_text = (site / page).read_text("utf-8")
+        for line in text.splitlines()[2:]:
+            line = line.strip().lstrip("- ")
+            if line:
+                assert html.escape(line, quote=False) in html_text, line

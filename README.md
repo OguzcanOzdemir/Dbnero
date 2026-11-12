@@ -37,7 +37,7 @@ SQL Server uses an ODBC driver. Windows already includes one. On macOS and Linux
 ## What it does
 
 - **Back up** one database or many. Each database gets its own file and archive entry, and one failure never hides the others.
-- **Schedules:** back up automatically every day, on chosen days or every few hours, and keep only the last N backups per database. They also run while dbnero is closed (Windows Task Scheduler, macOS launchd or a systemd user timer start it briefly); missed runs catch up when the computer is back on.
+- **Schedules:** back up automatically every day, on chosen days or every few hours, and keep only the last N backups per database. They also run while dbnero is closed (Windows Task Scheduler, macOS launchd or a systemd user timer start it briefly); missed runs catch up when the computer is back on, and dbnero tells you about missed or failed backups the next time you open it.
 - **Never half-written:** backups go to a temporary file, are verified with the engine's tools, then moved into place with a SHA-256 checksum, a schema snapshot and a `manifest.json`.
 - **Restore safely:** pick the database to restore into or type a new name. Replacing an existing database needs an explicit confirmation, takes a safety backup first and compares the restored schema with the backup.
 - **Compare** a backup with a live database, two backups or two live databases. Schema differences cover tables, columns, keys, indexes, views, triggers and routines. Data differences are row-level by primary key, using a temporary restore.
@@ -106,6 +106,10 @@ Architecture notes: [docs/architecture.md](docs/architecture.md) · Project rule
 - Cloud storage
 - Encrypted archives, team or central management
 - PostgreSQL global objects, MySQL physical backups
+
+## Terms and privacy
+
+dbnero asks you to accept its [Terms of Use](https://oguzcanozdemir.github.io/Dbnero/terms.html) and [Privacy Policy](https://oguzcanozdemir.github.io/Dbnero/privacy.html) once, on first start. In short: it is provided without warranty, you are responsible for checking your backups, and it collects no data at all.
 
 ## License
 

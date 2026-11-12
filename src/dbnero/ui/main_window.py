@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 
 from PySide6.QtCore import QSize, Qt, QTimer
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import (
 from dbnero import APP_NAME, __version__
 from dbnero.core.app import AppContext
 from dbnero.core.jobs import Job
-from dbnero.core.models import JobKind
+from dbnero.core.models import JobKind, Notification, NotificationLevel
 from dbnero.ui import icons, theme
 from dbnero.ui.archive_page import ArchivePage
 from dbnero.ui.backup_page import BackupPage
@@ -175,6 +176,21 @@ class MainWindow(QMainWindow):
         self.schedule_timer.start()
         QTimer.singleShot(5_000, self.run_due_schedules)
 
+        # Notifications (missed or failed scheduled backups) show on Home and,
+        # where the desktop supports it, as a short system notification.
+        self._seen_notes: set[str] = set()
+        self.tray: QSystemTrayIcon | None = None
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray = QSystemTrayIcon(QIcon(str(icons.app_icon_path())), self)
+            self.tray.setToolTip(APP_NAME)
+            self.tray.activated.connect(lambda _reason: self._bring_to_front())
+            self.tray.messageClicked.connect(self._bring_to_front)
+            self.tray.show()
+        self.overview.notifications_changed.connect(self.check_notifications)
+        self.schedule_timer.timeout.connect(self.check_notifications)
+        self.bridge.finished.connect(lambda _job: self.check_notifications())
+        QTimer.singleShot(1_000, self.check_notifications)
+
     def _paint_icons(self) -> None:
         t = theme.tokens()
         for row, key in self._key_for_row.items():
@@ -227,9 +243,45 @@ class MainWindow(QMainWindow):
             ),
         )
         self._schedule_job = job
+        # A missed run is announced as soon as its run starts.
+        QTimer.singleShot(1_500, self.check_notifications)
         self.schedules.refresh_status()
         self.bridge.when_done(job, lambda _j: self._on_backups_changed())
         return job
+
+    def check_notifications(self) -> list[Notification]:
+        """Refresh the unread notifications; returns the ones not seen before."""
+        try:
+            notes = self.app.catalog.list_notifications(unread_only=True)
+        except Exception:
+            log.exception("Could not read notifications")
+            return []
+        new = [n for n in notes if n.id not in self._seen_notes]
+        self._seen_notes = {n.id for n in notes}
+        self.overview.reload_notifications()
+        home = self.nav.item(self._row_for_key["overview"])
+        if home is not None:
+            home.setText(f"Home  ({len(notes)})" if notes else "Home")
+        if new and self.tray is not None:
+            if len(new) == 1:
+                title, message = new[0].title, new[0].message
+            else:
+                title = f"{len(new)} new notifications"
+                message = "\n".join(n.title for n in new[:4])
+            danger = any(n.level is NotificationLevel.DANGER for n in new)
+            icon = (
+                QSystemTrayIcon.MessageIcon.Critical
+                if danger
+                else QSystemTrayIcon.MessageIcon.Warning
+            )
+            self.tray.showMessage(f"{APP_NAME}: {title}", message, icon, 15_000)
+        return new
+
+    def _bring_to_front(self) -> None:
+        self.show_page("overview")
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def _open_restore(self, backup_id: str) -> None:
         self.restore.select_backup(backup_id)
@@ -276,4 +328,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.bridge.detach()
+        self.schedule_timer.stop()
+        if self.tray is not None:
+            self.tray.hide()
         event.accept()

@@ -102,6 +102,18 @@ batches_t = Table(
     Column("schedule_id", String),
 )
 
+notifications_t = Table(
+    "notifications",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("created_at_utc", UTCDateTime, nullable=False),
+    Column("level", String, nullable=False),
+    Column("title", String, nullable=False),
+    Column("message", String, nullable=False),
+    Column("schedule_id", String),
+    Column("read_at_utc", UTCDateTime),
+)
+
 schedules_t = Table(
     "schedules",
     metadata,
@@ -458,6 +470,65 @@ class Catalog:
         with self._tx() as conn:
             rows = conn.execute(query).all()
         return [_row_to_backup(r) for r in rows]
+
+    # -- notifications ------------------------------------------------------
+
+    def add_notification(self, note: m.Notification) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                insert(notifications_t).values(
+                    id=note.id,
+                    created_at_utc=note.created_at_utc,
+                    level=note.level.value,
+                    title=note.title,
+                    message=note.message,
+                    schedule_id=note.schedule_id,
+                    read_at_utc=note.read_at_utc,
+                )
+            )
+
+    def update_notification(
+        self, note_id: str, *, level: m.NotificationLevel | None = None, message: str | None = None
+    ) -> None:
+        values: dict[str, Any] = {}
+        if level is not None:
+            values["level"] = level.value
+        if message is not None:
+            values["message"] = message
+        if values:
+            with self._tx() as conn:
+                conn.execute(
+                    update(notifications_t).where(notifications_t.c.id == note_id).values(values)
+                )
+
+    def list_notifications(self, unread_only: bool = True, limit: int = 50) -> list[m.Notification]:
+        c = notifications_t.c
+        query = select(notifications_t).order_by(c.created_at_utc.desc()).limit(limit)
+        if unread_only:
+            query = query.where(c.read_at_utc.is_(None))
+        with self._tx() as conn:
+            rows = conn.execute(query).all()
+        return [
+            m.Notification(
+                id=r.id,
+                created_at_utc=r.created_at_utc,
+                level=m.NotificationLevel(r.level),
+                title=r.title,
+                message=r.message,
+                schedule_id=r.schedule_id,
+                read_at_utc=r.read_at_utc,
+            )
+            for r in rows
+        ]
+
+    def mark_notifications_read(self, ids: list[str] | None = None) -> None:
+        """Mark the given notifications (or all unread ones) as read."""
+        c = notifications_t.c
+        query = update(notifications_t).where(c.read_at_utc.is_(None))
+        if ids is not None:
+            query = query.where(c.id.in_(ids))
+        with self._tx() as conn:
+            conn.execute(query.values(read_at_utc=m.utc_now()))
 
     # -- backups ----------------------------------------------------------
 

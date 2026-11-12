@@ -1,0 +1,33 @@
+dbnero - Privacy Policy
+
+Version 1, effective 12 November 2026
+
+In short: dbnero does not collect, send or sell any of your data. Everything stays on your computer and the database servers you connect to.
+
+1. What dbnero stores, and where
+
+Everything dbnero stores is kept on your own computer:
+- connection details (server name, port, user name, options) and the list of your backups, in a local catalog file;
+- passwords, only if you choose "Save password", in your operating system's keychain (Windows Credential Manager, macOS Keychain or the Secret Service on Linux). If Windows refuses access to the Credential Manager, they are stored in a file encrypted for your Windows user account. Passwords are never written to the catalog, logs, backups or command lines;
+- backup files, manifests and schema snapshots, in the archive folder you choose;
+- settings and log files, in your user profile. Logs mask passwords.
+
+2. What dbnero sends
+
+dbnero connects only to the database servers you add, to back up, restore and compare them. It has no telemetry, analytics, advertising, accounts or crash reporting, and does not contact the dbnero authors or any other service. dbnero does not check for updates by itself.
+
+3. Data in your databases
+
+Backups and comparison reports contain data from your databases, which can include personal data. dbnero processes this data only on your computer and only when you ask it to. You decide what to back up and who receives backup files or reports; for this data you are the data controller under data protection laws such as GDPR or KVKK.
+
+4. Website and downloads
+
+The dbnero website is hosted on GitHub Pages and the downloads on GitHub. When you visit them, GitHub may process technical data such as your IP address under the GitHub Privacy Statement. The website loads its fonts from Google Fonts, so Google also receives your IP address when you open it (see the Google Privacy Policy). The website sets no cookies and uses no analytics or trackers.
+
+5. Removing your data
+
+Uninstalling dbnero does not delete your backups. To remove everything, delete the archive folder, the dbnero folders in your user profile, and the "dbnero.connections" entries in your keychain.
+
+6. Changes and contact
+
+If this policy changes, dbnero asks you to accept it again. Questions: https://github.com/OguzcanOzdemir/Dbnero/issues

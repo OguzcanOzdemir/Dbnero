@@ -219,7 +219,8 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Geri Yükle: tek hedef alanı; ad varsa onay kutusuyla yerine yazılır, yoksa oluşturulur
 - [x] Geri Yükle: başka bir iş bitince seçilen sunucu/veritabanı sıfırlanmıyor (0.1.5)
 - [x] Zamanlanmış yedekler (0.2.0): her gün / seçili günler / birkaç saatte bir, "son N yedeği tut", uygulama kapalıyken de çalışır (Windows Görev Zamanlayıcı, macOS launchd, Linux systemd), kaçırılan çalıştırma telafi edilir, süreçler arası kilit
-- [ ] Zamanlanmış yedek başarısız olunca bildirim (masaüstü / e-posta)
+- [x] Uygulama içi bildirimler (0.3.0): kaçırılan ve başarısız zamanlanmış yedekler açılışta Ana sayfada + sistem bildirimi
+- [x] Kullanım Şartları + Gizlilik Politikası: ilk açılışta bir kez onay, Windows kurulumunda lisans sayfası, sitede sayfalar
 - [ ] macOS/Linux için SQL Server ODBC sürücüsünü gömmek (sürücü sistem bileşeni; ileride saf-Python TDS sürücüsü değerlendirilebilir)
 - [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
 - [ ] macOS Intel derlemesi

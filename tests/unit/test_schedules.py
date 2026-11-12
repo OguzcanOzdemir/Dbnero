@@ -264,3 +264,62 @@ def test_launch_command(monkeypatch):
     monkeypatch.delenv("APPIMAGE")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert launch_command() == [sys.executable, RUN_DUE_FLAG]
+
+
+# -- notifications ------------------------------------------------------------------
+
+
+def test_missed_runs_counted():
+    from dbnero.core.schedule_service import missed_runs
+
+    created = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    s = _sched(time_of_day="02:00", created_at_utc=created)
+    # Closed for three nights: three runs missed, the first on 2 March.
+    now = datetime(2026, 3, 4, 9, 0, tzinfo=UTC)
+    missed = missed_runs(s, now, UTC_TZ)
+    assert missed is not None and missed.count == 3
+    assert missed.first_due == datetime(2026, 3, 2, 2, 0, tzinfo=UTC)
+    assert "3 runs did not happen" in missed.text()
+    # Started a few minutes late (the OS task's interval) is not "missed".
+    assert missed_runs(s, datetime(2026, 3, 2, 2, 5, tzinfo=UTC), UTC_TZ) is None
+    s.enabled = False
+    assert missed_runs(s, now, UTC_TZ) is None
+
+
+def test_missed_run_notifies_and_catches_up_once(world):
+    created = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    s = _save(world, created_at_utc=created)
+    now = datetime(2026, 3, 4, 9, 0, tzinfo=UTC)
+    runs = world.app.schedules.run_due(now=now, tz=UTC_TZ)
+    assert len(runs) == 1  # caught up once, not three times
+    [note] = world.app.catalog.list_notifications()
+    assert note.title == "Missed backup: nightly" and note.level.value == "warning"
+    assert "3 runs did not happen" in note.message and "1 database backed up" in note.message
+    assert note.schedule_id == s.id
+    world.app.catalog.mark_notifications_read()
+    assert world.app.catalog.list_notifications() == []
+    assert len(world.app.catalog.list_notifications(unread_only=False)) == 1
+
+
+def test_missed_and_failed_run_is_one_danger_notification(world):
+    created = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    _save(world, created_at_utc=created, databases=["erp"])
+    world.servers["pg1"].fail_backup = {"erp"}
+    world.app.schedules.run_due(now=datetime(2026, 3, 2, 9, 0, tzinfo=UTC), tz=UTC_TZ)
+    [note] = world.app.catalog.list_notifications()
+    assert note.level.value == "danger" and "failed" in note.message
+
+
+def test_on_time_runs_only_notify_failures(world):
+    s = _save(world, databases=["crm", "erp"])
+    world.app.schedules.run(s)
+    assert world.app.catalog.list_notifications() == []  # success: no noise
+    world.servers["pg1"].fail_backup = {"erp"}
+    world.app.schedules.run(s)
+    [note] = world.app.catalog.list_notifications()
+    assert note.title == "Scheduled backup partly failed: nightly"
+    assert note.level.value == "danger"
+    # "Run now" shows its result on screen instead.
+    world.app.catalog.mark_notifications_read()
+    world.app.schedules.run_locked(world.app.scheduler_lock_path, s.id)
+    assert world.app.catalog.list_notifications() == []

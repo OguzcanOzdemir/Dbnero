@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -48,8 +50,12 @@ class StatCard(Card):
         set_tone(self.value, tone)
 
 
+MAX_NOTIFICATIONS_SHOWN = 5
+
+
 class OverviewPage(Page):
     navigate = Signal(str)
+    notifications_changed = Signal()
 
     def __init__(self, app: AppContext, bridge: JobBridge, parent: QWidget | None = None) -> None:
         super().__init__("Home", "", parent)
@@ -60,6 +66,22 @@ class OverviewPage(Page):
         self.header_actions.addWidget(
             button("Back up now", "primary", lambda: self.navigate.emit("new_backup"))
         )
+
+        # Missed or failed scheduled backups; stays until dismissed.
+        self.notes_card = Card("Notifications")
+        self.notes_box = QVBoxLayout()
+        self.notes_box.setSpacing(8)
+        self.notes_card.body.addLayout(self.notes_box)
+        notes_actions = QHBoxLayout()
+        self.btn_schedules = button(
+            "Open schedules", "ghost", lambda: self.navigate.emit("schedules")
+        )
+        self.btn_dismiss = button("Dismiss all", on_click=self.dismiss_notifications)
+        notes_actions.addWidget(self.btn_schedules)
+        notes_actions.addStretch(1)
+        notes_actions.addWidget(self.btn_dismiss)
+        self.notes_card.body.addLayout(notes_actions)
+        self.root.addWidget(self.notes_card)
 
         self.attention = Banner("warning")
         self.btn_cleanup = button("Remove leftovers", "ghost", self.cleanup_partials)
@@ -92,6 +114,7 @@ class OverviewPage(Page):
         self.failed_empty = muted("Nothing has failed recently.")
         failed_card.body.addWidget(self.failed_empty)
         failed_card.body.addWidget(self.failed, 1)
+        failed_card.body.addStretch(1)
         lists.addWidget(failed_card, 2)
         box = QVBoxLayout()
         box.addLayout(lists)
@@ -116,7 +139,32 @@ class OverviewPage(Page):
             table.setItemDelegateForColumn(status_col, StatusDelegate(table))
         return table
 
+    def reload_notifications(self) -> int:
+        notes = self.app.catalog.list_notifications(unread_only=True)
+        while self.notes_box.count():
+            item = self.notes_box.takeAt(0)
+            if item is not None and (widget := item.widget()) is not None:
+                widget.deleteLater()
+        for note in notes[:MAX_NOTIFICATIONS_SHOWN]:
+            banner = Banner(note.level.value)
+            banner.label.setTextFormat(Qt.TextFormat.RichText)
+            banner.show_message(
+                f"<b>{html.escape(note.title)}</b> · {html.escape(fmt_local(note.created_at_utc))}"
+                f"<br>{html.escape(note.message)}"
+            )
+            self.notes_box.addWidget(banner)
+        if len(notes) > MAX_NOTIFICATIONS_SHOWN:
+            self.notes_box.addWidget(muted(f"and {len(notes) - MAX_NOTIFICATIONS_SHOWN} more"))
+        self.notes_card.setVisible(bool(notes))
+        return len(notes)
+
+    def dismiss_notifications(self) -> None:
+        self.app.catalog.mark_notifications_read()
+        self.reload_notifications()
+        self.notifications_changed.emit()
+
     def reload(self) -> None:
+        self.reload_notifications()
         stats = self.app.catalog_service.overview(self.app.backups.archive_root)
         self.card_total.set(str(stats.total_backups))
         self.card_failed.set(

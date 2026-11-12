@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · dbnero</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+:root { color-scheme: light dark; --bg: #f6f7f9; --text: #15171c; --muted: #5b6270;
+  --card: #ffffff; --line: #e3e6eb; --accent: #2f5bd3; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1115; --text: #e8eaee; --muted: #9aa1ad; --card: #171a20;
+    --line: #262a32; --accent: #7c9cff; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+nav a, a { color: var(--accent); }
+nav { margin-bottom: 24px; font-size: 15px; }
+article { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 28px; }
+h1 { font-size: 28px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 28px 0 8px; }
+.meta { color: var(--muted); margin: 0 0 20px; }
+ul { padding-left: 22px; }
+@media (max-width: 600px) { article { padding: 20px 16px; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="index.html">← dbnero</a> · <a href="terms.html">Terms of Use</a> ·
+<a href="privacy.html">Privacy Policy</a></nav>
+<article>
+<h1>Privacy Policy</h1>
+<p class="meta"></p>
+<p>Version 1, effective 12 November 2026</p>
+<p>In short: dbnero does not collect, send or sell any of your data. Everything stays on your computer and the database servers you connect to.</p>
+<h2>1. What dbnero stores, and where</h2>
+<p>Everything dbnero stores is kept on your own computer:</p>
+<ul>
+<li>connection details (server name, port, user name, options) and the list of your backups, in a local catalog file;</li>
+<li>passwords, only if you choose "Save password", in your operating system's keychain (Windows Credential Manager, macOS Keychain or the Secret Service on Linux). If Windows refuses access to the Credential Manager, they are stored in a file encrypted for your Windows user account. Passwords are never written to the catalog, logs, backups or command lines;</li>
+<li>backup files, manifests and schema snapshots, in the archive folder you choose;</li>
+<li>settings and log files, in your user profile. Logs mask passwords.</li>
+</ul>
+<h2>2. What dbnero sends</h2>
+<p>dbnero connects only to the database servers you add, to back up, restore and compare them. It has no telemetry, analytics, advertising, accounts or crash reporting, and does not contact the dbnero authors or any other service. dbnero does not check for updates by itself.</p>
+<h2>3. Data in your databases</h2>
+<p>Backups and comparison reports contain data from your databases, which can include personal data. dbnero processes this data only on your computer and only when you ask it to. You decide what to back up and who receives backup files or reports; for this data you are the data controller under data protection laws such as GDPR or KVKK.</p>
+<h2>4. Website and downloads</h2>
+<p>The dbnero website is hosted on GitHub Pages and the downloads on GitHub. When you visit them, GitHub may process technical data such as your IP address under the GitHub Privacy Statement. The website loads its fonts from Google Fonts, so Google also receives your IP address when you open it (see the Google Privacy Policy). The website sets no cookies and uses no analytics or trackers.</p>
+<h2>5. Removing your data</h2>
+<p>Uninstalling dbnero does not delete your backups. To remove everything, delete the archive folder, the dbnero folders in your user profile, and the "dbnero.connections" entries in your keychain.</p>
+<h2>6. Changes and contact</h2>
+<p>If this policy changes, dbnero asks you to accept it again. Questions: https://github.com/OguzcanOzdemir/Dbnero/issues</p>
+</article>
+</main>
+</body>
+</html>

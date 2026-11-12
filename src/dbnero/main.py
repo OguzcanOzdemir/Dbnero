@@ -33,6 +33,27 @@ def install_error_dialog(message_box: Any, log_file: Path | None = None) -> None
     sys.excepthook = hook
 
 
+def ensure_legal_accepted(settings: Any, dialog_factory: Any = None) -> bool:
+    """Ask once (and again when the terms change) to accept the Terms of Use
+    and Privacy Policy. Returns False when the user declines."""
+    from dbnero.core.models import utc_now
+    from dbnero.core.settings import save_settings
+    from dbnero.legal import LEGAL_VERSION
+
+    if settings.legal_accepted_version == LEGAL_VERSION:
+        return True
+    if dialog_factory is None:
+        from dbnero.ui.legal_dialog import LegalDialog
+
+        dialog_factory = LegalDialog
+    if not dialog_factory(require_acceptance=True).exec():
+        return False
+    settings.legal_accepted_version = LEGAL_VERSION
+    settings.legal_accepted_at = utc_now().isoformat(timespec="seconds")
+    save_settings(settings, settings_path())
+    return True
+
+
 def run_due(settings_file: Path | None = None) -> int:
     """Headless: run the scheduled backups that are due, then exit. Started by
     the operating system's scheduler (see ``core.os_scheduler``)."""
@@ -102,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
     apply_theme(app, mode)
 
     install_error_dialog(QMessageBox, log_file)
+
+    if not ensure_legal_accepted(settings):
+        log.info("Terms not accepted; quitting")
+        return 0
 
     try:
         context = AppContext.create(settings, settings_path=settings_path())

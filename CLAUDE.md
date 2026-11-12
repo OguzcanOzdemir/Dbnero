@@ -139,6 +139,7 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 | Arka plan işleri (iptal, ilerleme, kalıcı log) | `src/dbnero/core/jobs.py` |
 | Zamanlanmış yedekler (ne zaman, çalıştırma, saklama, süreçler arası kilit) | `src/dbnero/core/schedule_service.py` |
 | İşletim sistemi zamanlayıcısı (schtasks / launchd / systemd) | `src/dbnero/core/os_scheduler.py` |
+| Kullanım şartları / gizlilik metinleri ve onay penceresi | `src/dbnero/legal/`, `src/dbnero/ui/legal_dialog.py` |
 | Genel bakış istatistikleri, arşivden içe aktarma | `src/dbnero/core/catalog_service.py` |
 | Ayarlar (platformdirs, JSON) | `src/dbnero/core/settings.py` |
 | Loglama + parola maskeleme | `src/dbnero/core/logging_setup.py` |
@@ -183,6 +184,17 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 - Saatler kullanıcının yerel saatiyle (`HH:MM`) saklanır; kaçırılan çalıştırma bilgisayar açılınca bir kez yapılır.
 - Arka plan kaydı ayarı `Settings.background_schedules`; zamanlama kalmayınca OS görevi kaldırılır. Windows kaldırıcısı da görevi siler (`dbnero.iss` `[UninstallRun]`).
 - Testler gerçek OS zamanlayıcısına asla dokunmaz: `world` fixture'ı sahte `OsScheduler(run=...)` verir.
+
+## Bildirimler
+
+- Yalnızca uygulama içi (e-posta/Slack vb. entegrasyon **yok**, kullanıcı istemedi). `notifications` tablosu (migration v4) iki çalıştırıcı tarafından da yazılır; uygulama açılınca okunmamışlar Ana sayfada kart olarak, Home menüsünde sayı olarak ve varsa sistem tepsisi bildirimi olarak gösterilir. "Dismiss all" okundu işaretler.
+- Kaçırılan çalıştırma (`missed_runs`, `MISSED_GRACE` = 15 dk'dan geç): çalıştırma başlarken uyarı bildirimi eklenir, bitince sonuçla güncellenir (başarısızsa danger). Zamanında ama başarısız/kısmen başarısız çalıştırma danger bildirimi üretir; başarılı çalıştırma ve "Run now" bildirim üretmez.
+
+## Hukuki metinler
+
+- `src/dbnero/legal/TERMS.txt` ve `PRIVACY.txt` (ASCII, Inno Setup için) tek kaynak: ilk açılışta `LegalDialog` ile bir kez onaylatılır (`Settings.legal_accepted_version`), Ayarlar > About'tan okunur, Windows kurulumunda lisans sayfası olarak gösterilir, sitede `site/terms.html` / `privacy.html` olarak yayınlanır.
+- Metni değiştirirsen: `python packaging/build_legal_pages.py` çalıştır (test senkronu kontrol eder) ve esaslı değişiklikte `LEGAL_VERSION`'ı artır (kullanıcılar yeniden onaylar).
+- Gizlilik metni iddiaları doğru kalmalı: uygulama telemetri göndermez, güncelleme kontrolü yapmaz, yalnızca kullanıcının DB sunucularına bağlanır. Bunlardan birini değiştiren özellik eklersen PRIVACY.txt'yi de güncelle.
 
 ## Sürüm yayınlama
 

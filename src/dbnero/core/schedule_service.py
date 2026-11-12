@@ -28,6 +28,8 @@ from dbnero.core.connection_service import ConnectionService
 from dbnero.core.logging_setup import mask_secrets
 from dbnero.core.models import (
     BackupStatus,
+    Notification,
+    NotificationLevel,
     Schedule,
     ScheduleFrequency,
     ScheduleRunStatus,
@@ -40,6 +42,9 @@ log = logging.getLogger(__name__)
 LogFn = Callable[[str, str], None]
 
 WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+# A run that starts later than this after its time counts as missed: the OS
+# task starts every few minutes, so only a closed app or computer is this late.
+MISSED_GRACE = timedelta(minutes=15)
 SCHEDULED_TAG = "scheduled"
 
 
@@ -95,6 +100,43 @@ def next_run(sched: Schedule, tz: tzinfo | None = None) -> datetime | None:
         return None
     base = sched.last_run_utc or sched.created_at_utc
     return next_run_after(sched, base, tz)
+
+
+@dataclass(slots=True)
+class MissedRuns:
+    count: int
+    first_due: datetime
+    last_due: datetime
+
+    def text(self) -> str:
+        first = fmt_when(self.first_due)
+        if self.count == 1:
+            return f"It was due {first} and did not run because dbnero or the computer was off."
+        return (
+            f"{self.count} runs did not happen because dbnero or the computer was off "
+            f"(the first was due {first})."
+        )
+
+
+def fmt_when(dt: datetime) -> str:
+    """Local time for messages, e.g. "Thu 12 Nov 02:00"."""
+    return dt.astimezone().strftime("%a %d %b %H:%M")
+
+
+def missed_runs(
+    sched: Schedule, now: datetime, tz: tzinfo | None = None, grace: timedelta = MISSED_GRACE
+) -> MissedRuns | None:
+    """Scheduled times that passed without a run, if the oldest is overdue by
+    more than ``grace``."""
+    first = next_run(sched, tz)
+    if first is None or first > now - grace:
+        return None
+    count, last = 0, first
+    when: datetime | None = first
+    while when is not None and when <= now and count < 1000:
+        count, last = count + 1, when
+        when = next_run_after(sched, when, tz)
+    return MissedRuns(count, first, last)
 
 
 def describe(sched: Schedule) -> str:
@@ -194,13 +236,34 @@ class ScheduleService:
         happens under it, so a run still marked "running" now is a leftover
         of a closed or crashed process."""
         self.catalog.mark_interrupted_schedules()
+        now = now or utc_now()
         runs = []
         for sched in self.due(now, tz):
             if ctx and ctx.cancelled:
                 break
+            missed = missed_runs(sched, now, tz)
             if not self.catalog.claim_schedule_run(sched.id, sched.last_run_utc, utc_now()):
                 continue  # another runner got it first
-            runs.append(self.run(sched, ctx, log_fn, claimed=True))
+            note = None
+            if missed is not None:
+                # Tell the user right away; the result is added when the run ends.
+                note = Notification(
+                    title=f"Missed backup: {sched.name}",
+                    message=f"{missed.text()} Backing it up now.",
+                    level=NotificationLevel.WARNING,
+                    schedule_id=sched.id,
+                )
+                self.catalog.add_notification(note)
+            run = self.run(sched, ctx, log_fn, claimed=True, notify_failure=note is None)
+            if note is not None:
+                ok = run.status is ScheduleRunStatus.SUCCEEDED
+                self.catalog.update_notification(
+                    note.id,
+                    level=NotificationLevel.WARNING if ok else NotificationLevel.DANGER,
+                    message=f"{missed.text() if missed else ''} Caught up "
+                    f"{fmt_when(utc_now())}: {run.message}.".strip(),
+                )
+            runs.append(run)
         return runs
 
     def is_busy(self, lock: Path) -> bool:
@@ -226,7 +289,8 @@ class ScheduleService:
             if schedule_id is None:
                 return self.run_due(ctx, log_fn)
             self.catalog.mark_interrupted_schedules()
-            return [self.run(self.get(schedule_id), ctx, log_fn)]
+            # "Run now": the result is on screen, no notification needed.
+            return [self.run(self.get(schedule_id), ctx, log_fn, notify_failure=False)]
 
     def run(
         self,
@@ -234,8 +298,10 @@ class ScheduleService:
         ctx: JobContext | None = None,
         log_fn: LogFn | None = None,
         claimed: bool = False,
+        notify_failure: bool = True,
     ) -> ScheduleRun:
-        """Back up the schedule's databases now and apply its retention."""
+        """Back up the schedule's databases now and apply its retention. A
+        failed or partly failed run leaves a notification for the user."""
         emit = log_fn or (lambda level, msg: log.log(logging.getLevelName(level), msg))
         if not claimed:
             self.catalog.claim_schedule_run(sched.id, sched.last_run_utc, utc_now())
@@ -249,6 +315,17 @@ class ScheduleService:
             emit("ERROR", f"Schedule “{sched.name}” failed: {message}")
             run = ScheduleRun(sched, ScheduleRunStatus.FAILED, message)
         self.catalog.record_schedule_result(sched.id, run.status.value, run.message)
+        failed = run.status in {ScheduleRunStatus.FAILED, ScheduleRunStatus.PARTIAL}
+        if notify_failure and failed and run.message != "Cancelled":
+            partly = run.status is ScheduleRunStatus.PARTIAL
+            self.catalog.add_notification(
+                Notification(
+                    title=f"Scheduled backup {'partly ' if partly else ''}failed: {sched.name}",
+                    message=run.message,
+                    level=NotificationLevel.DANGER,
+                    schedule_id=sched.id,
+                )
+            )
         return run
 
     def _run(self, sched: Schedule, ctx: JobContext | None, emit: LogFn) -> ScheduleRun:
@@ -276,7 +353,9 @@ class ScheduleService:
         elif ok == 0:
             status = ScheduleRunStatus.FAILED
             errors = "; ".join(f"{i.database}: {i.error}" for i in result.failed if i.error)
-            message = f"All {failed} failed. {errors}".strip()
+            message = (
+                f"Backup failed. {errors}" if failed == 1 else f"All {failed} failed. {errors}"
+            ).strip()
         else:
             status = ScheduleRunStatus.PARTIAL
             names = ", ".join(i.database for i in result.failed)

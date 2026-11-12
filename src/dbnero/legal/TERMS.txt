@@ -1,0 +1,38 @@
+dbnero - Terms of Use
+
+Version 1, effective 12 November 2026
+
+Please read these terms before using dbnero. By installing, starting or using dbnero you agree to them. If you do not agree, do not use the software.
+
+1. The software
+
+dbnero is free, open-source software for backing up, restoring and comparing PostgreSQL, MySQL and Microsoft SQL Server databases. It is distributed under the MIT License, which is included with the software. These terms add to the MIT License and do not limit the rights it grants you.
+
+2. Your responsibility for your data
+
+You are responsible for your databases, your backups and how you use dbnero. In particular you are responsible for:
+- checking that your backups complete, are verified and can be restored, for example by restoring them regularly into a test database;
+- keeping more than one copy of important backups, in more than one place (another disk, another computer or off-site storage);
+- making sure you are allowed to back up, copy, restore and compare the databases you connect to;
+- protecting backup files, which can contain personal or confidential data, and handling them according to the laws that apply to you (for example data protection laws such as GDPR or KVKK);
+- reviewing what a restore will do before you confirm it. Restoring into an existing database replaces its contents and cannot be undone.
+
+3. No warranty
+
+dbnero is provided "as is" and "as available", without warranty of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose, accuracy and non-infringement. We do not warrant that dbnero is free of errors, that every backup will succeed or can be restored, that scheduled backups will run on time, or that comparison results are complete.
+
+4. Limitation of liability - loss of data
+
+To the maximum extent permitted by law, the authors and contributors of dbnero are not liable for any loss of data, corrupted, incomplete or missing backups, failed or partial restores, overwritten databases, downtime, lost profits, or any direct, indirect, incidental, special or consequential damages arising from the use of, or the inability to use, dbnero, even if advised of the possibility of such damages. Nothing in these terms excludes liability that cannot be excluded by law.
+
+5. Third-party software
+
+dbnero uses database client tools and drivers made by others (such as pg_dump, pg_restore, mysqldump, mysql and Microsoft ODBC drivers), some of which are bundled with the app. They are provided under their own licenses and their makers' terms.
+
+6. Changes
+
+New versions of dbnero may come with updated terms. When the terms change, dbnero asks you to accept them again before you continue.
+
+7. Contact
+
+Questions and problem reports: https://github.com/OguzcanOzdemir/Dbnero/issues

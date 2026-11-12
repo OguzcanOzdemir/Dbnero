@@ -24,10 +24,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dbnero import APP_NAME, __version__
 from dbnero.core.app import AppContext
 from dbnero.core.connection_service import EngineToolReport, install_hint
 from dbnero.core.models import Engine
 from dbnero.ui.common import Card, Page, button, muted, run_async
+from dbnero.ui.legal_dialog import LegalDialog
 
 TOOL_NAMES = ("pg_dump", "pg_restore", "mysqldump", "mysql")
 
@@ -207,6 +209,21 @@ class SettingsPage(Page):
             self.tool_edits[name] = edit
         tools_card.body.addWidget(
             button("Check tools…", on_click=lambda: ToolCheckDialog(self.app, self).exec()),
+            0,
+            Qt.AlignmentFlag.AlignLeft,
+        )
+        about_card, about = form_card("About")
+        about.addRow("Version", QLabel(f"{APP_NAME} {__version__}"))
+        accepted = s.legal_accepted_at.replace("T", " ")[:16]
+        about.addRow(
+            "Terms accepted",
+            QLabel(f"{accepted} UTC" if accepted else "Not yet"),
+        )
+        about_card.body.addWidget(
+            button(
+                "Terms of Use and Privacy Policy…",
+                on_click=lambda: LegalDialog(require_acceptance=False, parent=self).exec(),
+            ),
             0,
             Qt.AlignmentFlag.AlignLeft,
         )
