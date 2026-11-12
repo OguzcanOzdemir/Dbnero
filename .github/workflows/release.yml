@@ -72,6 +72,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: unixODBC for pyodbc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install unixodbc
       - run: pip install -e ".[all,packaging]"
       - name: Version
         shell: bash
