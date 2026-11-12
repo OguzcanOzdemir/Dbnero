@@ -6,12 +6,10 @@ import html
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
-    QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
@@ -23,6 +21,7 @@ from dbnero.ui.common import (
     STATUS_TONE,
     Banner,
     Card,
+    DataTable,
     JobBridge,
     Page,
     StatusDelegate,
@@ -103,14 +102,14 @@ class OverviewPage(Page):
         lists = QHBoxLayout()
         lists.setSpacing(16)
         recent_card = Card("Recent backups")
-        self.recent = self._table(["Created", "Database", "Server", "Size", "Status"], 4)
+        self.recent = self._table(["Created", "Database", "Server", "Size", "Status"], 4, 2)
         self.recent_empty = muted("No backups yet. Add a connection, then back up a database.")
         recent_card.body.addWidget(self.recent, 1)
         recent_card.body.addWidget(self.recent_empty)
         recent_card.body.addStretch(0)
         lists.addWidget(recent_card, 3)
         failed_card = Card("Recent problems")
-        self.failed = self._table(["Started", "Job", "Problem"], -1)
+        self.failed = self._table(["Started", "Job", "Problem"], -1, 2)
         self.failed_empty = muted("Nothing has failed recently.")
         failed_card.body.addWidget(self.failed_empty)
         failed_card.body.addWidget(self.failed, 1)
@@ -124,19 +123,16 @@ class OverviewPage(Page):
         self.reload()
 
     @staticmethod
-    def _table(headers: list[str], status_col: int) -> QTableWidget:
-        table = QTableWidget(0, len(headers))
-        table.setHorizontalHeaderLabels(headers)
-        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        table.setShowGrid(False)
-        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        table.verticalHeader().setVisible(False)
-        table.verticalHeader().setDefaultSectionSize(34)
-        table.horizontalHeader().setStretchLastSection(True)
+    def _table(headers: list[str], status_col: int, stretch_col: int) -> DataTable:
+        keep = (0,) if status_col < 0 else (0, status_col)
+        table = DataTable(
+            headers,
+            status_col=status_col,
+            stretch_col=stretch_col,
+            selectable=False,
+            keep_cols=keep,
+        )
         table.setObjectName("flat")
-        if status_col >= 0:
-            table.setItemDelegateForColumn(status_col, StatusDelegate(table))
         return table
 
     def reload_notifications(self) -> int:
@@ -207,7 +203,7 @@ class OverviewPage(Page):
                 if c == 4:
                     item.setData(StatusDelegate.TONE_ROLE, STATUS_TONE[rec.status.value])
                 self.recent.setItem(r, c, item)
-        self.recent.resizeColumnsToContents()
+        self.recent.fit_columns()
         self.recent.setVisible(bool(stats.recent))
         self.recent_empty.setVisible(not stats.recent)
 
@@ -219,7 +215,7 @@ class OverviewPage(Page):
                 item = QTableWidgetItem(v)
                 item.setToolTip(v)
                 self.failed.setItem(r, c, item)
-        self.failed.resizeColumnsToContents()
+        self.failed.fit_columns()
         self.failed.setVisible(bool(stats.recent_failed_jobs))
         self.failed_empty.setVisible(not stats.recent_failed_jobs)
         self.failed_empty.setAlignment(Qt.AlignmentFlag.AlignTop)

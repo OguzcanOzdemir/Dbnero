@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -26,6 +25,7 @@ from dbnero.ui.common import (
     Collapsible,
     Page,
     button,
+    combo,
     error_text,
     muted,
     run_async,
@@ -75,7 +75,7 @@ class ConnectionsPage(Page):
         form.setVerticalSpacing(10)
         self.name = QLineEdit()
         self.name.setPlaceholderText("e.g. Production CRM")
-        self.engine = QComboBox()
+        self.engine = combo()
         for e in Engine:
             self.engine.addItem(e.display_name, e.value)
         self.engine.currentIndexChanged.connect(self._on_engine_changed)
@@ -87,7 +87,7 @@ class ConnectionsPage(Page):
         host_row = QHBoxLayout()
         host_row.addWidget(self.host, 1)
         host_row.addWidget(self.port)
-        self.auth = QComboBox()
+        self.auth = combo()
         self.auth.addItem("User name and password", AuthType.PASSWORD.value)
         self.auth.addItem("Windows authentication", AuthType.WINDOWS.value)
         self.auth.currentIndexChanged.connect(self._update_auth_fields)
@@ -114,7 +114,7 @@ class ConnectionsPage(Page):
         self.advanced = Collapsible("Advanced options")
         adv = QFormLayout()
         adv.setHorizontalSpacing(16)
-        self.ssl = QComboBox()
+        self.ssl = combo()
         for mode, label in SSL_LABELS.items():
             self.ssl.addItem(label, mode.value)
         self.default_db = QLineEdit()
@@ -128,7 +128,7 @@ class ConnectionsPage(Page):
         mf = QFormLayout(self.mssql_box)
         mf.setContentsMargins(0, 8, 0, 0)
         mf.setHorizontalSpacing(16)
-        self.odbc_driver = QComboBox()
+        self.odbc_driver = combo()
         self.odbc_driver.setEditable(True)
         self.trust_cert = QCheckBox("Trust the server certificate")
         self.server_dir = QLineEdit()
@@ -138,7 +138,7 @@ class ConnectionsPage(Page):
         local_row = QHBoxLayout()
         local_row.addWidget(self.local_dir, 1)
         local_row.addWidget(button("Browse…", on_click=self._browse_local_dir))
-        self.transfer = QComboBox()
+        self.transfer = combo()
         self.transfer.addItem("Automatic", "auto")
         self.transfer.addItem("Shared folder", "share")
         self.transfer.addItem("Through SQL (OPENROWSET)", "sql")

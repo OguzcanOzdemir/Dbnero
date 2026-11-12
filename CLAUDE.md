@@ -168,6 +168,8 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 - Tüm kullanıcıya görünen metinler İngilizce, kısa ve eylem odaklı (ör. "Back up 2 databases", "Restore finished").
 - Renkler yalnızca `ui/theme.py` token'larından gelir; sayfalarda sabit renk yazma. Açık ve koyu tema ayrı tasarlanmıştır, ikisini de kontrol et.
 - Ortak bileşenleri kullan: `Page` (başlık + sağ üst eylemler `header_actions`), `Card`, `Banner`, `Collapsible` (gelişmiş seçenekler), `StatusDelegate` (durum rozeti), `JobProgress`, `button(text, kind)` (`primary` / `danger` / `ghost`).
+- Tablolar için **her zaman** `DataTable` (satır vurgusu, kısaltma + tooltip, sütunları genişliğe sığdırma; doldurduktan sonra `fit_columns()`; tarih/boyut/durum gibi kısalmaması gerekenleri `keep_cols` ile ver). Ayrıntı panelleri için `details_html`.
+- Açılır listeler için `QComboBox()` yerine `combo()` kullan: uzun öğeler formu/komşuları sıkıştırmaz. Ok işareti QSS'teki PNG'den gelir (`theme_images`); `::drop-down` kuralını kaldırma, Fusion'ın kenarlığı geri gelir.
 - Her sayfada tek bir birincil (primary) eylem olsun; nadir kullanılan ayarlar "Advanced options" altında gizli kalsın.
 - `QWidget.actions()` ile çakışmaması için sayfa başlığındaki buton düzeni `header_actions` adını kullanır.
 - Testler sahte adaptörle (`tests/unit/fakes.py`, `tests/unit/conftest.py::world`) çalışır; yeni ekran davranışı için `tests/unit/test_main_window.py`'ye test ekle.
@@ -175,6 +177,8 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 ## Parolalar
 
 `AppContext` varsayılan olarak `default_credential_store()` kullanır: önce OS anahtar kasası; Windows'ta kasa erişimi reddederse (ör. hata 1312) yapılandırma klasöründeki `credentials.dat` dosyasına **DPAPI ile şifrelenmiş** olarak yazar (yalnızca aynı Windows kullanıcısı çözebilir). Hiçbiri yoksa parola **yalnızca bellekte, oturum boyunca** tutulur ve `credential_store_available()` False döner (UI uyarı gösterir). Bağlantı formundaki "Save password" işareti kaldırılırsa parola `set_session_password` ile yalnızca oturumluk tutulur ve kayıtlı kopya silinir. Parolayı **şifresiz** diske yazan bir geri dönüş ekleme.
+
+`SessionFallbackCredentialStore` iş parçacığı güvenlidir (sayfalar ve işler parolayı aynı anda okur): başarısız bir depo kilit altında **yalnızca bir kez** düşürülür; okuma ve silme tüm depolarda sırayla yapılır (kasa düzeldiğinde DPAPI dosyasındaki parola yine bulunur). Bu kuralı bozma; 0.3.0 ve öncesindeki "parola kaydedilmedi" hataları buradaki yarıştan geliyordu. Parolası olmayan bağlantıda giriş hatası `missing_password_message` ile açık bir mesaja çevrilir.
 
 ## Zamanlanmış yedekler
 

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QPlainTextEdit,
     QSplitter,
-    QTableWidget,
     QTableWidgetItem,
     QWidget,
 )
@@ -18,6 +16,7 @@ from dbnero.core.models import JobKind
 from dbnero.ui.common import (
     JOB_STATUS_TEXT,
     STATUS_TONE,
+    DataTable,
     JobBridge,
     Page,
     StatusDelegate,
@@ -42,16 +41,12 @@ class JobsPage(Page):
         self.header_actions.addWidget(self.btn_cancel)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["Started", "Type", "Job", "Status", "Problem"])
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(36)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setItemDelegateForColumn(STATUS_COL, StatusDelegate(self.table))
+        self.table = DataTable(
+            ["Started", "Type", "Job", "Status", "Problem"],
+            status_col=STATUS_COL,
+            stretch_col=4,
+            keep_cols=(0, 1, STATUS_COL),
+        )
         self.table.itemSelectionChanged.connect(self._show_logs)
         splitter.addWidget(self.table)
         self.logs = QPlainTextEdit()
@@ -93,7 +88,7 @@ class JobsPage(Page):
                 self.table.setItem(r, c, item)
             if job.job_id == selected:
                 self.table.selectRow(r)
-        self.table.resizeColumnsToContents()
+        self.table.fit_columns()
         self.table.setColumnWidth(STATUS_COL, max(self.table.columnWidth(STATUS_COL), 100))
         self._update_buttons()
 

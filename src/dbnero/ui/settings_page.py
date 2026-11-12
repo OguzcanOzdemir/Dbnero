@@ -8,7 +8,6 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -28,7 +27,7 @@ from dbnero import APP_NAME, __version__
 from dbnero.core.app import AppContext
 from dbnero.core.connection_service import EngineToolReport, install_hint
 from dbnero.core.models import Engine
-from dbnero.ui.common import Card, Page, button, muted, run_async
+from dbnero.ui.common import Card, Page, button, combo, muted, run_async
 from dbnero.ui.legal_dialog import LegalDialog
 
 TOOL_NAMES = ("pg_dump", "pg_restore", "mysqldump", "mysql")
@@ -148,7 +147,7 @@ class SettingsPage(Page):
             return card, form
 
         _, appearance = form_card("Appearance")
-        self.theme = QComboBox()
+        self.theme = combo()
         for value, label in (("system", "Match system"), ("light", "Light"), ("dark", "Dark")):
             self.theme.addItem(label, value)
         self.theme.setCurrentIndex(max(self.theme.findData(s.theme), 0))

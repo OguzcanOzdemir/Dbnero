@@ -3,12 +3,14 @@ small themed widgets (page header, card, status pill, collapsible section)."""
 
 from __future__ import annotations
 
+import html
 import traceback
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
 from PySide6.QtCore import (
+    QEvent,
     QModelIndex,
     QObject,
     QPersistentModelIndex,
@@ -19,17 +21,22 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QHelpEvent, QMouseEvent, QPainter, QPen, QResizeEvent
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTableWidget,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -99,6 +106,30 @@ STATUS_TONE = {
 }
 
 
+def details_html(title: str, subtitle: str, rows: list[tuple[str, str]], problem: str = "") -> str:
+    """A small label/value sheet for detail panels (themed, wraps long values)."""
+    t = theme.tokens()
+    esc = html.escape
+    parts = [
+        f"<div style='font-size:12pt; font-weight:600'>{esc(title)}</div>",
+        f"<div style='color:{t.text_muted}; margin-bottom:10px'>{esc(subtitle)}</div>",
+        "<table cellspacing='0' cellpadding='3' width='100%'>",
+    ]
+    for label, value in rows:
+        if not label:
+            continue
+        parts.append(
+            f"<tr><td style='color:{t.text_muted}; white-space:nowrap; padding-right:12px' "
+            f"valign='top'>{esc(label)}</td><td>{esc(value or '–')}</td></tr>"
+        )
+    parts.append("</table>")
+    if problem:
+        parts.append(
+            f"<p style='color:{t.danger}; margin-top:10px'><b>Problem:</b> {esc(problem)}</p>"
+        )
+    return "".join(parts)
+
+
 def tone_colors(tone: str) -> tuple[QColor, QColor]:
     t = theme.tokens()
     fg, bg = {
@@ -134,6 +165,20 @@ def button(text: str, kind: str = "", on_click: Callable[[], Any] | None = None)
     if on_click is not None:
         btn.clicked.connect(lambda _checked=False: on_click())
     return btn
+
+
+def combo(min_chars: int = 14) -> QComboBox:
+    """A combo box that does not demand the width of its longest item, so a
+    long backup label can never squeeze its form label or neighbours away.
+    The popup is widened to show items in full."""
+    box = QComboBox()
+    box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    box.setMinimumContentsLength(min_chars)
+    view = box.view()
+    if view is not None:
+        view.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        view.setMinimumWidth(320)
+    return box
 
 
 def muted(text: str = "", wrap: bool = True) -> QLabel:
@@ -246,7 +291,77 @@ class Collapsible(QWidget):
         self.toggle.setChecked(True)
 
 
-class StatusDelegate(QStyledItemDelegate):
+CELL_PADDING = 12
+
+
+class CellDelegate(QStyledItemDelegate):
+    """Draws a table cell the dbnero way: full-row hover and selection colors,
+    a hairline divider, padded and elided text, and a tooltip with the full
+    text when it does not fit. Item foreground, font and alignment are kept."""
+
+    def _background(self, painter: QPainter, option: QStyleOptionViewItem, row: int) -> None:
+        t = theme.tokens()
+        view = self.parent()
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = isinstance(view, DataTable) and view.hover_row == row
+        if selected:
+            painter.fillRect(option.rect, QColor(t.accent_soft))
+        elif hovered:
+            painter.fillRect(option.rect, QColor(t.surface_alt))
+        painter.setPen(QPen(QColor(t.surface_alt if not t.dark else t.border), 1))
+        r = option.rect
+        painter.drawLine(r.left(), r.bottom(), r.right(), r.bottom())
+
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
+        painter.save()
+        self._background(painter, option, index.row())
+        text = str(index.data() or "")
+        if text:
+            fg = index.data(Qt.ItemDataRole.ForegroundRole)
+            color = fg.color() if hasattr(fg, "color") else QColor(theme.tokens().text)
+            font = index.data(Qt.ItemDataRole.FontRole)
+            if font is not None:
+                painter.setFont(font)
+            align = index.data(Qt.ItemDataRole.TextAlignmentRole)
+            flags = (
+                Qt.AlignmentFlag(int(align))
+                if align
+                else Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            area = option.rect.adjusted(CELL_PADDING, 0, -CELL_PADDING, 0)
+            fm = painter.fontMetrics()
+            shown = fm.elidedText(text.splitlines()[0], Qt.TextElideMode.ElideRight, area.width())
+            painter.setPen(color)
+            painter.drawText(area, int(flags | Qt.AlignmentFlag.AlignVCenter), shown)
+        painter.restore()
+
+    def helpEvent(
+        self,
+        event: QHelpEvent,
+        view: QAbstractItemView,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> bool:
+        if event is None or not index.isValid():
+            return False
+        tip = index.data(Qt.ItemDataRole.ToolTipRole)
+        text = str(index.data() or "")
+        too_wide = (
+            option.fontMetrics.horizontalAdvance(text) > option.rect.width() - 2 * CELL_PADDING
+        )
+        if tip or (text and (too_wide or "\n" in text)):
+            QToolTip.showText(event.globalPos(), str(tip or text), view)
+            return True
+        QToolTip.hideText()
+        return True
+
+
+class StatusDelegate(CellDelegate):
     """Paints the cell text as a rounded pill. The tone comes from the item's
     ``Qt.UserRole + 2`` data ("success", "danger", "warning", "accent", ...)."""
 
@@ -258,8 +373,9 @@ class StatusDelegate(QStyledItemDelegate):
         option: QStyleOptionViewItem,
         index: QModelIndex | QPersistentModelIndex,
     ) -> None:
-        if option.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(option.rect, option.palette.highlight().color().lighter(185))
+        painter.save()
+        self._background(painter, option, index.row())
+        painter.restore()
         text = str(index.data() or "")
         if not text:
             return
@@ -270,13 +386,119 @@ class StatusDelegate(QStyledItemDelegate):
         width = fm.horizontalAdvance(text) + 18
         height = fm.height() + 6
         rect: QRect = option.rect
-        pill = QRect(rect.x() + 8, rect.center().y() - height // 2, width, height)
+        pill = QRect(rect.x() + CELL_PADDING - 2, rect.center().y() - height // 2, width, height)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(bg)
         painter.drawRoundedRect(pill, height / 2, height / 2)
         painter.setPen(fg)
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, text)
         painter.restore()
+
+
+class DataTable(QTableWidget):
+    """The table used across the app: no grid, comfortable rows, left-aligned
+    headers, whole-row hover/selection and columns that fit the width.
+
+    ``stretch_col`` takes the remaining width; other columns size to their
+    contents up to ``max_col_width`` (longer text is elided with a tooltip)."""
+
+    def __init__(
+        self,
+        headers: list[str],
+        status_col: int = -1,
+        stretch_col: int | None = None,
+        selectable: bool = True,
+        max_col_width: int = 280,
+        keep_cols: tuple[int, ...] = (),
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(0, len(headers), parent)
+        self.keep_cols = set(keep_cols)  # never narrowed (dates, sizes, status)
+        self.setObjectName("data")
+        self.hover_row = -1
+        self.stretch_col = len(headers) - 1 if stretch_col is None else stretch_col
+        self.max_col_width = max_col_width
+        self.setHorizontalHeaderLabels(headers)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        if selectable:
+            self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        else:
+            self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+            self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setShowGrid(False)
+        self.setWordWrap(False)
+        self.setMouseTracking(True)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        vh = self.verticalHeader()
+        vh.setVisible(False)
+        vh.setDefaultSectionSize(40)
+        hh = self.horizontalHeader()
+        hh.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        hh.setHighlightSections(False)
+        hh.setStretchLastSection(False)
+        hh.setMinimumSectionSize(60)
+        self.setItemDelegate(CellDelegate(self))
+        if status_col >= 0:
+            self.setItemDelegateForColumn(status_col, StatusDelegate(self))
+
+    def fit_columns(self) -> None:
+        """Size columns to their contents (capped), then fit them into the
+        visible width: the stretch column takes what is left, and if space is
+        short the widest columns give way first (their text is elided)."""
+        hh = self.horizontalHeader()
+        for col in range(self.columnCount()):
+            hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+        self.resizeColumnsToContents()
+        self._natural = [
+            min(self.columnWidth(c) + 2 * CELL_PADDING, self.max_col_width)
+            for c in range(self.columnCount())
+        ]
+        self._apply_widths()
+
+    def _apply_widths(self) -> None:
+        natural = getattr(self, "_natural", None)
+        if not natural:
+            return
+        available = self.viewport().width()
+        widths = list(natural)
+        stretch = self.stretch_col if 0 <= self.stretch_col < len(widths) else -1
+        min_stretch = 140 if stretch >= 0 else 0
+        others = [c for c in range(len(widths)) if c != stretch]
+        shrinkable = [c for c in others if c not in self.keep_cols]
+        excess = sum(widths[c] for c in others) + min_stretch - available
+        # Shrink the widest columns first, never below a readable minimum.
+        while excess > 0 and shrinkable:
+            col = max(shrinkable, key=lambda c: widths[c])
+            floor = 100
+            if widths[col] <= floor:
+                break
+            cut = min(excess, widths[col] - floor, 24)
+            widths[col] -= cut
+            excess -= cut
+        for c in others:
+            self.setColumnWidth(c, widths[c])
+        if stretch >= 0:
+            rest = available - sum(widths[c] for c in others)
+            self.setColumnWidth(stretch, max(rest, min(natural[stretch], 140), 60))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._apply_widths()
+
+    def _set_hover(self, row: int) -> None:
+        if row != self.hover_row:
+            self.hover_row = row
+            self.viewport().update()
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        self._set_hover(self.rowAt(int(event.position().y())))
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event: QEvent) -> None:
+        self._set_hover(-1)
+        super().leaveEvent(event)
 
 
 # -- background calls (not recorded as jobs) ---------------------------------

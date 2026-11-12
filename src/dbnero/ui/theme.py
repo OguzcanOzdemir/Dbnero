@@ -10,16 +10,31 @@ rather than inverted. ``apply_theme`` follows the OS color scheme by default.
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QGuiApplication,
+    QImage,
+    QPainter,
+    QPainterPath,
+    QPalette,
+    QPen,
+)
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QApplication,
+    QLineEdit,
     QProxyStyle,
     QStyle,
     QStyleFactory,
+    QStyleHintReturn,
     QStyleOption,
     QWidget,
 )
@@ -118,7 +133,46 @@ def resolve(mode: ThemeMode) -> Tokens:
     return DARK if scheme == Qt.ColorScheme.Dark else LIGHT
 
 
-def stylesheet(t: Tokens) -> str:
+_image_dir: Path | None = None
+
+
+def _chevron_image(color: str, path: Path, scale: int) -> None:
+    size = 12 * scale
+    img = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(Qt.GlobalColor.transparent)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(color), 1.6 * scale)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    path_ = QPainterPath(QPointF(size * 0.2, size * 0.38))
+    path_.lineTo(QPointF(size * 0.5, size * 0.66))
+    path_.lineTo(QPointF(size * 0.8, size * 0.38))
+    p.drawPath(path_)
+    p.end()
+    img.save(str(path))
+
+
+def theme_images(t: Tokens) -> dict[str, str]:
+    """PNG arrows for the stylesheet (PNG needs no image plugin, unlike SVG).
+    Qt picks the ``@2x`` file on high-DPI screens."""
+    global _image_dir
+    if _image_dir is None:
+        _image_dir = Path(tempfile.mkdtemp(prefix="dbnero-theme-"))
+    name = "dark" if t.dark else "light"
+    out = {}
+    for key, color in (("arrow", t.text_muted), ("arrow_disabled", t.border)):
+        base = _image_dir / f"{key}-{name}.png"
+        if not base.exists():
+            _chevron_image(color, base, 1)
+            _chevron_image(color, base.with_name(f"{key}-{name}@2x.png"), 2)
+        out[key] = base.as_posix()
+    return out
+
+
+def stylesheet(t: Tokens, images: dict[str, str] | None = None) -> str:
+    img = images or {"arrow": "", "arrow_disabled": ""}
     return f"""
 * {{ outline: none; }}
 QWidget {{ color: {t.text}; font-size: 10pt; }}
@@ -155,20 +209,41 @@ QLabel[tone="warning"] {{ color: {t.warning}; }}
 QLabel[tone="danger"] {{ color: {t.danger}; }}
 
 /* Inputs */
-QLineEdit, QComboBox, QSpinBox, QDateEdit, QDateTimeEdit, QPlainTextEdit, QTextBrowser {{
+QLineEdit, QComboBox, QSpinBox, QDateEdit, QDateTimeEdit, QTimeEdit, QPlainTextEdit,
+QTextBrowser {{
     background: {t.surface}; border: 1px solid {t.border}; border-radius: 7px;
     padding: 6px 8px; selection-background-color: {t.accent}; selection-color: {t.accent_text};
 }}
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus, QDateTimeEdit:focus,
-QPlainTextEdit:focus {{ border: 1px solid {t.accent}; }}
-QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {t.text_muted};
-    background: {t.surface_alt}; }}
-/* The drop-down arrow is drawn by DbneroStyle; styling ::drop-down here
-   would hide it. */
+QTimeEdit:focus, QPlainTextEdit:focus {{ border: 1px solid {t.accent}; }}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDateEdit:disabled,
+QTimeEdit:disabled {{ color: {t.text_muted}; background: {t.surface_alt}; }}
 QComboBox:hover, QDateEdit:hover, QDateTimeEdit:hover {{ border: 1px solid {t.text_muted}; }}
-QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0; border: none; }}
+QComboBox:focus, QDateEdit:focus {{ border: 1px solid {t.accent}; }}
+/* Drop-down: a borderless area with a themed chevron (no Fusion bevel). */
+QComboBox, QDateEdit {{ padding-right: 30px; }}
+QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: center right; width: 28px;
+    border: none; background: transparent; }}
+QComboBox::down-arrow, QDateEdit::down-arrow, QDateTimeEdit::down-arrow {{
+    image: url("{img["arrow"]}"); width: 12px; height: 12px; }}
+QComboBox::down-arrow:disabled, QDateEdit::down-arrow:disabled {{
+    image: url("{img["arrow_disabled"]}"); }}
+/* An editable combo's text field must not draw a second box inside it. */
+QComboBox QLineEdit {{ border: none; background: transparent; padding: 0; margin: 0;
+    border-radius: 0; }}
+/* Spin boxes and time fields are typed into; no tiny step buttons. */
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0; height: 0;
+    border: none; image: none; }}
+QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {{ width: 0; height: 0;
+    image: none; }}
 QComboBox QAbstractItemView {{ background: {t.surface}; border: 1px solid {t.border};
+    border-radius: 6px; padding: 4px; outline: none;
     selection-background-color: {t.accent_soft}; selection-color: {t.text}; }}
+QComboBox QAbstractItemView::item {{ min-height: 28px; padding: 2px 8px; border-radius: 5px; }}
+QCalendarWidget QWidget {{ alternate-background-color: {t.surface_alt}; }}
+QCalendarWidget QToolButton {{ color: {t.text}; background: transparent; border: none;
+    padding: 4px 8px; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
 
 /* Buttons */
@@ -187,18 +262,23 @@ QPushButton[kind="ghost"] {{ background: transparent; border: none; color: {t.ac
     padding: 4px 6px; }}
 QPushButton[kind="ghost"]:hover {{ text-decoration: underline; }}
 
-/* Tables and lists */
+/* Tables and lists (DataTable cells are painted by CellDelegate) */
 QTableWidget, QTreeWidget, QListWidget {{ background: {t.surface}; border: 1px solid {t.border};
     border-radius: 10px; gridline-color: transparent; alternate-background-color: {t.surface};
     selection-background-color: {t.accent_soft}; selection-color: {t.text}; }}
-QTableWidget::item, QTreeWidget::item {{ padding: 6px 8px;
-    border-bottom: 1px solid {t.surface_alt}; }}
-QListWidget::item {{ padding: 6px 8px; }}
+QTableWidget::item {{ border: none; padding: 0; }}
+QTreeWidget::item {{ padding: 6px 8px; border-bottom: 1px solid {t.surface_alt}; }}
+QTreeWidget::item:hover, QListWidget::item:hover {{ background: {t.surface_alt}; }}
+QTreeWidget::item:selected {{ background: {t.accent_soft}; color: {t.text}; }}
+QListWidget::item {{ padding: 6px 8px; border-radius: 6px; }}
 QListWidget::item:selected {{ background: {t.accent_soft}; color: {t.text}; }}
-QHeaderView {{ background: {t.surface}; border: none; }}
+QHeaderView {{ background: {t.surface}; border: none; border-top-left-radius: 10px;
+    border-top-right-radius: 10px; }}
 QTableWidget#flat, QTreeWidget#flat {{ border: none; border-radius: 0; }}
 QHeaderView::section {{ background: {t.surface}; color: {t.text_muted}; border: none;
-    border-bottom: 1px solid {t.border}; padding: 8px; font-weight: 600; font-size: 9pt; }}
+    border-bottom: 1px solid {t.border}; padding: 10px 12px; font-weight: 600;
+    font-size: 9pt; }}
+QHeaderView::section:hover {{ color: {t.text}; }}
 QTableCornerButton::section {{ background: {t.surface}; border: none; }}
 
 QTabWidget::pane {{ border: none; }}
@@ -227,6 +307,26 @@ class DbneroStyle(QProxyStyle):
     def __init__(self, t: Tokens) -> None:
         super().__init__(QStyleFactory.create("Fusion"))
         self.t = t
+
+    def polish(self, arg: Any) -> Any:  # QWidget | QApplication | QPalette overloads
+        if isinstance(arg, QAbstractSpinBox):
+            # Stylesheet padding does not reach a spin box's inner text field.
+            edit = arg.findChild(QLineEdit)
+            if edit is not None:
+                edit.setTextMargins(6, 0, 0, 0)
+        return super().polish(arg)
+
+    def styleHint(
+        self,
+        hint: QStyle.StyleHint,
+        option: QStyleOption | None = None,
+        widget: QWidget | None = None,
+        returnData: QStyleHintReturn | None = None,
+    ) -> int:
+        if hint == QStyle.StyleHint.SH_FormLayoutLabelAlignment:
+            # Form labels line up with the middle of their input fields.
+            return int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        return int(super().styleHint(hint, option, widget, returnData))
 
     def drawPrimitive(
         self,
@@ -366,5 +466,5 @@ def apply_theme(app: QApplication, mode: ThemeMode = ThemeMode.SYSTEM) -> Tokens
     if font.pointSizeF() < 10:
         font.setPointSizeF(10)
     app.setFont(font)
-    app.setStyleSheet(stylesheet(t))
+    app.setStyleSheet(stylesheet(t, theme_images(t)))
     return t

@@ -210,3 +210,83 @@ def test_real_dpapi_roundtrip(tmp_path):
     assert EncryptedFileCredentialStore(tmp_path / "credentials.dat").get_password("a") == (
         "pässwörd"
     )
+
+
+def test_parallel_reads_never_lose_the_encrypted_fallback(tmp_path):
+    """Regression: several pages read passwords at once on start-up. With the
+    Windows keychain refusing access, every thread used to drop a store, so the
+    encrypted file was dropped too and saved passwords looked missing."""
+    import threading
+    import time
+
+    from dbnero.security.credentials import (
+        CredentialStoreUnavailable,
+        EncryptedFileCredentialStore,
+        SessionFallbackCredentialStore,
+    )
+
+    class SlowBroken:
+        def get_password(self, *a):
+            time.sleep(0.01)
+            raise CredentialStoreUnavailable("1312")
+
+        set_password = delete_password = get_password
+
+    file_store = EncryptedFileCredentialStore(tmp_path / "c.dat", encrypt=_xor, decrypt=_xor)
+    file_store.set_password("conn", "pw")
+    store = SessionFallbackCredentialStore(SlowBroken(), fallbacks=[file_store])
+    results: list[str | None] = []
+    errors: list[BaseException] = []
+
+    def read():
+        try:
+            results.append(store.get_password("conn"))
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=read) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert results == ["pw"] * 8
+    assert store.persistent and store.is_available()
+
+
+def test_password_saved_in_fallback_is_found_when_keyring_works_again(tmp_path, fake_keyring):
+    from dbnero.security.credentials import (
+        EncryptedFileCredentialStore,
+        KeyringCredentialStore,
+        SessionFallbackCredentialStore,
+    )
+
+    file_store = EncryptedFileCredentialStore(tmp_path / "c.dat", encrypt=_xor, decrypt=_xor)
+    file_store.set_password("old", "from-file")  # saved while the keychain failed
+    store = SessionFallbackCredentialStore(KeyringCredentialStore(), fallbacks=[file_store])
+    assert store.get_password("old") == "from-file"
+    store.set_password("new", "in-keyring")
+    assert fake_keyring.data[("dbnero.connections", "new")] == "in-keyring"
+    store.delete_password("old")
+    assert file_store.get_password("old") is None
+
+
+def test_missing_password_gives_a_clear_message(world):
+    from dbnero.adapters.base import ConnectionFailed
+    from dbnero.core.models import ConnectionProfile, Engine
+
+    p = ConnectionProfile(
+        name="no-pw", engine=Engine.POSTGRESQL, host="pg1", port=5432, username="u"
+    )
+    world.app.connections.save(p)  # no password saved
+
+    def deny(*_a, **_k):
+        raise ConnectionFailed('FATAL: password authentication failed for user "u"')
+
+    adapter = world.app.connections.adapter_for(p.id)
+    adapter._adapter.list_databases = deny
+    with pytest.raises(ConnectionFailed, match="No password is saved for “no-pw”"):
+        adapter.list_databases()
+    # With a password, the driver's own message is kept.
+    world.app.connections.save(p, "pw")
+    assert world.app.connections.adapter_for(p.id).list_databases() == ["crm", "erp"]

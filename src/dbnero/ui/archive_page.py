@@ -6,11 +6,9 @@ from datetime import UTC, datetime, time
 from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt, QUrl, Signal, SignalInstance
-from PySide6.QtGui import QDesktopServices, QFontDatabase
+from PySide6.QtGui import QDesktopServices, QTextOption
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
-    QComboBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
@@ -20,9 +18,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
-    QTableWidget,
     QTableWidgetItem,
+    QTextBrowser,
     QWidget,
 )
 
@@ -35,17 +32,20 @@ from dbnero.ui.common import (
     BACKUP_STATUS_TEXT,
     STATUS_TONE,
     Card,
+    DataTable,
     JobBridge,
     Page,
     StatusDelegate,
     button,
+    combo,
+    details_html,
     fmt_bytes,
     fmt_local,
     muted,
     show_error,
 )
 
-COLUMNS = ["Created", "Database", "Server", "Size", "Status", "Tags", "Description"]
+COLUMNS = ["Created", "Database", "Server", "Size", "Status", "Tags and description"]
 STATUS_COL = 4
 SIZE_COL = 3
 
@@ -95,17 +95,18 @@ class ArchivePage(Page):
         self.text.setPlaceholderText("Search database or description")
         self.text.setClearButtonEnabled(True)
         self.text.textChanged.connect(self.reload)
-        self.engine = QComboBox()
+        self.engine = combo()
         self.engine.addItem("All engines", "")
         for e in Engine:
             self.engine.addItem(e.display_name, e.value)
-        self.status = QComboBox()
+        self.status = combo()
         self.status.addItem("Any status", "")
         for s, label in BACKUP_STATUS_TEXT.items():
             self.status.addItem(label, s.value)
-        self.tag = QComboBox()
+        self.tag = combo()
         self.tag.addItem("Any tag", "")
-        self.tag.setMinimumWidth(110)
+        for box, width in ((self.engine, 150), (self.status, 140), (self.tag, 130)):
+            box.setFixedWidth(width)
         self.use_dates = QCheckBox("From")
         self.date_from = QDateEdit(QDate.currentDate().addMonths(-1))
         self.date_to = QDateEdit(QDate.currentDate())
@@ -116,8 +117,8 @@ class ArchivePage(Page):
             d.dateChanged.connect(self.reload)
             self.use_dates.toggled.connect(d.setEnabled)
         self.use_dates.toggled.connect(self.reload)
-        for combo in (self.engine, self.status, self.tag):
-            combo.currentIndexChanged.connect(self.reload)
+        for box in (self.engine, self.status, self.tag):
+            box.currentIndexChanged.connect(self.reload)
         filters.addWidget(self.text, 1)
         for w in (
             self.engine,
@@ -133,31 +134,23 @@ class ArchivePage(Page):
 
         body = QHBoxLayout()
         body.setSpacing(16)
-        self.table = QTableWidget(0, len(COLUMNS))
-        self.table.setHorizontalHeaderLabels(COLUMNS)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
+        self.table = DataTable(
+            COLUMNS,
+            status_col=STATUS_COL,
+            stretch_col=len(COLUMNS) - 1,
+            keep_cols=(0, SIZE_COL, STATUS_COL),
+        )
         self.table.setSortingEnabled(True)
-        self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(38)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.table.horizontalHeader().setHighlightSections(False)
-        self.table.setItemDelegateForColumn(STATUS_COL, StatusDelegate(self.table))
         self.table.itemSelectionChanged.connect(self._show_details)
         self.table.doubleClicked.connect(lambda _: self._emit_selected(self.restore_requested))
         body.addWidget(self.table, 3)
 
         panel = Card("Details")
-        panel.setFixedWidth(360)
-        self.details = QPlainTextEdit()
-        self.details.setReadOnly(True)
-        self.details.setFrameShape(QPlainTextEdit.Shape.NoFrame)
-        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
-        mono.setPointSizeF(max(mono.pointSizeF() - 0.5, 8.5))
-        self.details.setFont(mono)
+        panel.setFixedWidth(330)
+        self.details = QTextBrowser()
+        self.details.setFrameShape(QTextBrowser.Shape.NoFrame)
+        self.details.setOpenLinks(False)
+        self.details.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.details.setPlaceholderText("Select a backup to see its details.")
         panel.body.addWidget(self.details, 1)
         self.btn_restore = button(
@@ -232,8 +225,7 @@ class ArchivePage(Page):
                 f"{rec.server_label} · {ENGINE_SHORT[rec.engine]}",
                 fmt_bytes(rec.file_size),
                 BACKUP_STATUS_TEXT[rec.status],
-                ", ".join(rec.tags),
-                rec.description,
+                " · ".join(x for x in (" ".join(f"#{t}" for t in rec.tags), rec.description) if x),
             ]
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -246,7 +238,7 @@ class ArchivePage(Page):
                     )
                 self.table.setItem(r, c, item)
         self.table.setSortingEnabled(True)
-        self.table.resizeColumnsToContents()
+        self.table.fit_columns()
         self.table.setColumnWidth(STATUS_COL, max(self.table.columnWidth(STATUS_COL), 110))
         noun = "backup" if len(self._records) == 1 else "backups"
         self.count_label.setText(f"{len(self._records)} {noun} · {fmt_bytes(total)}")
@@ -282,32 +274,30 @@ class ArchivePage(Page):
         if rec is None:
             self.details.clear()
             return
-        tools = ", ".join(f"{k} {v}" for k, v in rec.tool_versions.items()) or "–"
-        lines = [
-            f"{rec.database_name}",
-            f"{rec.engine.display_name} {rec.engine_version}".strip(),
-            "",
-            f"Created     {fmt_local(rec.created_at_utc, seconds=True)} "
-            f"({rec.created_at_utc:%Y-%m-%d %H:%M:%S} UTC)",
-            f"Reference   {fmt_local(rec.reference_date) if rec.reference_date else '–'}",
-            f"Server      {rec.server_label}",
-            f"Status      {BACKUP_STATUS_TEXT[rec.status]}",
-            f"Size        {fmt_bytes(rec.file_size)}",
-            f"Format      {rec.backup_format}",
-            f"Tags        {', '.join(rec.tags) or '–'}",
-            f"Batch       {'yes' if rec.batch_id else 'no'}",
-            f"Tools       {tools}",
-            f"Snapshot    {'yes' if rec.schema_snapshot_path else 'no'}",
-            "",
-            f"SHA-256     {rec.checksum_sha256 or '–'}",
-            f"File        {rec.file_path}",
-            f"ID          {rec.backup_id}",
+        tools = ", ".join(f"{k} {v}" for k, v in rec.tool_versions.items())
+        rows = [
+            ("Created", fmt_local(rec.created_at_utc, seconds=True)),
+            ("", ""),
+            ("Status", BACKUP_STATUS_TEXT[rec.status]),
+            ("Server", rec.server_label),
+            ("Size", fmt_bytes(rec.file_size)),
+            ("Format", rec.backup_format),
+            ("Description", rec.description),
+            ("Tags", ", ".join(rec.tags)),
+            ("Reference date", fmt_local(rec.reference_date) if rec.reference_date else ""),
+            ("Part of a batch", "Yes" if rec.batch_id else "No"),
+            ("Schema snapshot", "Yes" if rec.schema_snapshot_path else "No"),
+            ("Tools", tools),
+            ("", ""),
+            ("SHA-256", rec.checksum_sha256 or ""),
+            ("File", str(rec.file_path)),
+            ("Backup ID", rec.backup_id),
         ]
-        if rec.extra:
-            lines.append("Extra       " + ", ".join(f"{k}={v}" for k, v in rec.extra.items()))
-        if rec.error_message:
-            lines += ["", f"Problem: {rec.error_message}"]
-        self.details.setPlainText("\n".join(lines))
+        rows += [(k, v) for k, v in rec.extra.items()]
+        subtitle = f"{rec.engine.display_name} {rec.engine_version}".strip()
+        self.details.setHtml(
+            details_html(rec.database_name, subtitle, rows, rec.error_message or "")
+        )
 
     # -- actions ----------------------------------------------------------
 

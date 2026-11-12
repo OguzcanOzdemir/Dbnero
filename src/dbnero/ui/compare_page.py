@@ -7,10 +7,8 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QButtonGroup,
     QCheckBox,
-    QComboBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -21,7 +19,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QSplitter,
-    QTableWidget,
     QTableWidgetItem,
     QTabWidget,
     QTreeWidget,
@@ -41,12 +38,14 @@ from dbnero.ui.common import (
     Banner,
     Card,
     Collapsible,
+    DataTable,
     JobBridge,
     JobProgress,
     Page,
     StatusDelegate,
     backup_choice_label,
     button,
+    combo,
     error_text,
     muted,
     plural,
@@ -101,9 +100,9 @@ class SourcePicker(Card):
         self.app = app
         form = QFormLayout()
         form.setHorizontalSpacing(16)
-        self.backup = QComboBox()
-        self.connection = QComboBox()
-        self.database = QComboBox()
+        self.backup = combo()
+        self.connection = combo()
+        self.database = combo()
         self.database.setPlaceholderText("Choose a database")
         self._wanted_db: str | None = None
         self._loaded_conn: str | None = None
@@ -115,13 +114,15 @@ class SourcePicker(Card):
         form.addRow(self.conn_label, self.connection)
         form.addRow(self.db_label, self.database)
         self.body.addLayout(form)
+        self.body.addStretch(1)
+        self._form = form
         self.set_live(False)
 
     def set_live(self, live: bool) -> None:
-        for w in (self.backup, self.backup_label):
-            w.setVisible(not live)
-        for w in (self.connection, self.conn_label, self.database, self.db_label):
-            w.setVisible(live)
+        # Hide whole form rows so hidden ones leave no gaps.
+        self._form.setRowVisible(self.backup, not live)
+        self._form.setRowVisible(self.connection, live)
+        self._form.setRowVisible(self.database, live)
 
     def reload(self) -> None:
         current_backup = self.backup.currentData()
@@ -260,7 +261,7 @@ class ComparePage(Page):
         self.samples.setValue(20)
         self.tables = QLineEdit()
         self.tables.setPlaceholderText("All tables, or e.g. public.orders, public.customers")
-        self.scratch = QComboBox()
+        self.scratch = combo()
         self.scratch_label = QLabel("Restore backups on")
         dopt.addRow("", self.count_only)
         dopt.addRow("Sample rows per table", self.samples)
@@ -297,8 +298,7 @@ class ComparePage(Page):
         schema_split.setStretchFactor(0, 3)
         schema_split.setStretchFactor(1, 2)
         self.tabs.addTab(schema_split, "Schema")
-        self.data_table = QTableWidget(0, 9)
-        self.data_table.setHorizontalHeaderLabels(
+        self.data_table = DataTable(
             [
                 "Table",
                 "Method",
@@ -309,14 +309,12 @@ class ComparePage(Page):
                 "Different",
                 "Result",
                 "Note",
-            ]
+            ],
+            status_col=7,
+            stretch_col=8,
+            selectable=False,
+            keep_cols=(2, 3, 4, 5, 6, 7),
         )
-        self.data_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.data_table.setShowGrid(False)
-        self.data_table.verticalHeader().setVisible(False)
-        self.data_table.verticalHeader().setDefaultSectionSize(36)
-        self.data_table.horizontalHeader().setStretchLastSection(True)
-        self.data_table.setItemDelegateForColumn(7, StatusDelegate(self.data_table))
         self.tabs.addTab(self.data_table, "Data")
         self.root.addWidget(self.tabs, 1)
 
@@ -512,7 +510,7 @@ class ComparePage(Page):
                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
                         )
                     self.data_table.setItem(r, c, cell)
-            self.data_table.resizeColumnsToContents()
+            self.data_table.fit_columns()
             if d.skipped:
                 parts.append(f"{plural(len(d.skipped), 'table')} on one side only")
         identical = (result.schema is None or result.schema.identical) and (

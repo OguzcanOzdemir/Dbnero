@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import functools
+import re
 from dataclasses import dataclass, field
+from typing import Any, cast
 
-from dbnero.adapters.base import DatabaseAdapter, create_adapter
+from dbnero.adapters.base import AdapterError, DatabaseAdapter, create_adapter
 from dbnero.adapters.tools import ENGINE_TOOLS, ToolInfo, check_engine_tools, list_odbc_drivers
 from dbnero.core.logging_setup import masking_filter
 from dbnero.core.models import AuthType, ConnectionProfile, Engine
@@ -15,6 +18,46 @@ from dbnero.storage.catalog import Catalog
 
 class ValidationError(ValueError):
     pass
+
+
+# Driver messages that mean "wrong or missing password" (PostgreSQL, MySQL,
+# SQL Server wording and error codes).
+_AUTH_FAILURE = re.compile(
+    r"password|authentication failed|login failed|access denied|28P01|1045|18456",
+    re.IGNORECASE,
+)
+
+
+def missing_password_message(profile: ConnectionProfile) -> str:
+    return (
+        f"No password is saved for “{profile.name}”. Open Connections, select it, type the "
+        "password, keep “Save password” ticked and choose Save."
+    )
+
+
+class _MissingPasswordHint:
+    """Wraps an adapter created without a password: a login failure is
+    reported as a missing saved password instead of a raw driver error."""
+
+    def __init__(self, adapter: DatabaseAdapter, profile: ConnectionProfile) -> None:
+        self._adapter = adapter
+        self._profile = profile
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._adapter, name)
+        if not callable(attr):
+            return attr
+
+        @functools.wraps(attr)
+        def call(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return attr(*args, **kwargs)
+            except AdapterError as exc:
+                if _AUTH_FAILURE.search(str(exc)):
+                    raise type(exc)(missing_password_message(self._profile)) from exc
+                raise
+
+        return call
 
 
 @dataclass(slots=True)
@@ -145,7 +188,10 @@ class ConnectionService:
             password = self.credentials.get_password(profile.id)
         if password:
             masking_filter.register(password)
-        return create_adapter(profile, password, self.settings.tool_paths)
+        adapter = create_adapter(profile, password, self.settings.tool_paths)
+        if not password and profile.auth_type is AuthType.PASSWORD:
+            return cast(DatabaseAdapter, _MissingPasswordHint(adapter, profile))
+        return adapter
 
     def test(self, profile: ConnectionProfile, password: str | None = None) -> str:
         self.validate(profile)

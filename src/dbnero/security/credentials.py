@@ -32,10 +32,9 @@ class CredentialStoreUnavailable(RuntimeError):
     """Raised when no usable OS keyring backend exists (e.g. headless Linux)."""
 
     def __init__(self, detail: str = "") -> None:
-        msg = (
-            "No secure credential store is available. On Linux install and unlock a "
-            "Secret Service provider (GNOME Keyring or KWallet)."
-        )
+        msg = "The system keychain is not available."
+        if sys.platform.startswith("linux"):
+            msg += " Install and unlock a Secret Service provider (GNOME Keyring or KWallet)."
         super().__init__(f"{msg} {detail}".strip())
 
 
@@ -197,10 +196,18 @@ class EncryptedFileCredentialStore:
                 self._write(data)
 
 
+_NOT_RUN = object()
+
+
 class SessionFallbackCredentialStore:
     """Saves passwords in the OS keyring, then in each fallback store in turn
     when one is unavailable. With none left, passwords are kept in memory for
     the current session only and ``persistent`` is False so the UI can say so.
+
+    Thread-safe: pages and jobs read passwords from several threads at once.
+    A failing store is dropped only once (by whichever thread sees it fail
+    first); the others simply retry with the next store, so a burst of
+    parallel reads can never skip past a working fallback.
 
     ``set_session_password`` keeps a password for this session only, on request
     (the user unticked "Save password")."""
@@ -212,70 +219,91 @@ class SessionFallbackCredentialStore:
     ) -> None:
         self._stores: list[CredentialStore] = [primary or KeyringCredentialStore(), *fallbacks]
         self._session = InMemoryCredentialStore()
+        self._lock = threading.RLock()
         self._probed = False
 
     @property
     def persistent(self) -> bool:
-        return bool(self._stores)
+        with self._lock:
+            return bool(self._stores)
 
-    def _fallback(self, exc: CredentialStoreUnavailable) -> None:
-        failed = type(self._stores.pop(0)).__name__
-        if self._stores:
-            log.warning("%s unavailable, using %s: %s", failed, type(self._stores[0]).__name__, exc)
-        else:
-            log.warning("Credential store unavailable, using session-only passwords: %s", exc)
+    def _current(self) -> CredentialStore | None:
+        with self._lock:
+            return self._stores[0] if self._stores else None
+
+    def _drop(self, store: CredentialStore, exc: CredentialStoreUnavailable) -> None:
+        with self._lock:
+            if store not in self._stores:
+                return  # another thread already dropped it
+            self._stores.remove(store)
+            if self._stores:
+                log.warning(
+                    "%s unavailable, using %s: %s",
+                    type(store).__name__,
+                    type(self._stores[0]).__name__,
+                    exc,
+                )
+            else:
+                log.warning("Credential store unavailable, using session-only passwords: %s", exc)
+
+    def _call(self, op: Callable[[CredentialStore], Any]) -> Any:
+        """Run ``op`` on the first working persistent store; ``_NOT_RUN`` if none."""
+        while (store := self._current()) is not None:
+            try:
+                return op(store)
+            except CredentialStoreUnavailable as exc:
+                self._drop(store, exc)
+        return _NOT_RUN
 
     def is_available(self) -> bool:
         """True when passwords are saved persistently. Probes the store once,
         because a backend can be installed but refuse access (Windows 1312)."""
-        if not self._probed:
+        with self._lock:
+            probe = not self._probed
             self._probed = True
-            while self._stores:
-                try:
-                    self._stores[0].get_password("__dbnero_probe__")
-                    break
-                except CredentialStoreUnavailable as exc:
-                    self._fallback(exc)
+        if probe:
+            self._call(lambda st: st.get_password("__dbnero_probe__"))
         return self.persistent
 
     def set_password(self, connection_id: str, password: str) -> None:
         self._session.delete_password(connection_id)
-        while self._stores:
-            try:
-                self._stores[0].set_password(connection_id, password)
-                return
-            except CredentialStoreUnavailable as exc:
-                self._fallback(exc)
-        self._session.set_password(connection_id, password)
+        if self._call(lambda st: st.set_password(connection_id, password)) is _NOT_RUN:
+            self._session.set_password(connection_id, password)
 
     def set_session_password(self, connection_id: str, password: str) -> None:
         """Keep the password until dbnero closes and remove any saved copy."""
-        self._delete_saved(connection_id)
+        self._each(lambda st: st.delete_password(connection_id))
         self._session.set_password(connection_id, password)
 
     def is_session_only(self, connection_id: str) -> bool:
         return self._session.get_password(connection_id) is not None
 
+    def _each(self, op: Callable[[CredentialStore], Any]) -> Any:
+        """Run ``op`` on every persistent store in order and return the first
+        non-None result. A password saved in a fallback while the keyring was
+        refusing access is still found after the keyring works again."""
+        with self._lock:
+            stores = list(self._stores)
+        for store in stores:
+            try:
+                result = op(store)
+            except CredentialStoreUnavailable as exc:
+                self._drop(store, exc)
+                continue
+            if result is not None:
+                return result
+        return None
+
     def get_password(self, connection_id: str) -> str | None:
         value = self._session.get_password(connection_id)
-        while value is None and self._stores:
-            try:
-                return self._stores[0].get_password(connection_id)
-            except CredentialStoreUnavailable as exc:
-                self._fallback(exc)
-        return value
+        if value is not None:
+            return value
+        found: str | None = self._each(lambda st: st.get_password(connection_id))
+        return found
 
     def delete_password(self, connection_id: str) -> None:
         self._session.delete_password(connection_id)
-        self._delete_saved(connection_id)
-
-    def _delete_saved(self, connection_id: str) -> None:
-        while self._stores:
-            try:
-                self._stores[0].delete_password(connection_id)
-                return
-            except CredentialStoreUnavailable as exc:
-                self._fallback(exc)
+        self._each(lambda st: st.delete_password(connection_id))
 
 
 def default_credential_store(config_dir: Path) -> SessionFallbackCredentialStore:

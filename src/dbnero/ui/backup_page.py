@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from PySide6.QtCore import QDateTime, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDateTimeEdit,
     QFormLayout,
     QHBoxLayout,
@@ -31,6 +30,7 @@ from dbnero.ui.common import (
     JobProgress,
     Page,
     button,
+    combo,
     error_text,
     fmt_bytes,
     muted,
@@ -67,7 +67,7 @@ class BackupPage(Page):
         self.root.addLayout(columns, 1)
 
         source = Card("Databases")
-        self.connection = QComboBox()
+        self.connection = combo()
         self.connection.currentIndexChanged.connect(self.load_databases)
         source.body.addWidget(self.connection)
         self.db_list = QListWidget()

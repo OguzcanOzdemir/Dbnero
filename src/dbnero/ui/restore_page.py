@@ -33,6 +33,7 @@ from dbnero.ui.common import (
     Page,
     backup_choice_label,
     button,
+    combo,
     error_text,
     fmt_bytes,
     muted,
@@ -71,7 +72,7 @@ class RestorePage(Page):
         columns.addLayout(left, 1)
 
         src = Card("Backup")
-        self.backup = QComboBox()
+        self.backup = combo()
         self.backup.currentIndexChanged.connect(self._on_backup_changed)
         self.backup_info = muted()
         src.body.addWidget(self.backup)
@@ -81,14 +82,14 @@ class RestorePage(Page):
         tgt = Card("Restore to")
         form = QFormLayout()
         form.setHorizontalSpacing(16)
-        self.target_conn = QComboBox()
+        self.target_conn = combo()
         self.target_conn.currentIndexChanged.connect(self._on_target_server_changed)
         form.addRow("Server", self.target_conn)
         tgt.body.addLayout(form)
 
         # One field: pick the database to replace (the backup's own database is
         # preselected) or type a name that does not exist yet to create it.
-        self.target_db = QComboBox()
+        self.target_db = combo()
         self.target_db.setEditable(True)
         self.target_db.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         if (edit := self.target_db.lineEdit()) is not None:

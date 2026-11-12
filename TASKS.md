@@ -221,6 +221,8 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Zamanlanmış yedekler (0.2.0): her gün / seçili günler / birkaç saatte bir, "son N yedeği tut", uygulama kapalıyken de çalışır (Windows Görev Zamanlayıcı, macOS launchd, Linux systemd), kaçırılan çalıştırma telafi edilir, süreçler arası kilit
 - [x] Uygulama içi bildirimler (0.3.0): kaçırılan ve başarısız zamanlanmış yedekler açılışta Ana sayfada + sistem bildirimi
 - [x] Kullanım Şartları + Gizlilik Politikası: ilk açılışta bir kez onay, Windows kurulumunda lisans sayfası, sitede sayfalar
+- [x] 0.3.1: parola deposu yarış durumu düzeltildi (Windows'ta kayıtlı parolanın "yok" görünmesi), eksik parola için açık mesaj
+- [x] 0.3.1: açılır listelerde siyah kenar ve iç içe kutu düzeltildi; tüm tablolar ortak `DataTable` ile (satır vurgusu, sığdırma, tooltip), ayrıntı paneli düzenlendi
 - [ ] macOS/Linux için SQL Server ODBC sürücüsünü gömmek (sürücü sistem bileşeni; ileride saf-Python TDS sürücüsü değerlendirilebilir)
 - [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
 - [ ] macOS Intel derlemesi

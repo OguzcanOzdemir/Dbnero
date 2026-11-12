@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTime, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
@@ -31,6 +30,7 @@ from dbnero.ui.common import (
     JobProgress,
     Page,
     button,
+    combo,
     error_text,
     fmt_local,
     muted,
@@ -103,14 +103,14 @@ class SchedulesPage(Page):
         form.setVerticalSpacing(10)
         self.name = QLineEdit()
         self.name.setPlaceholderText("e.g. Nightly production")
-        self.connection = QComboBox()
+        self.connection = combo()
         self.connection.currentIndexChanged.connect(lambda _i: self._load_databases())
         self.all_dbs = QCheckBox("All databases on this server, including new ones")
         self.all_dbs.toggled.connect(self._update_fields)
         self.db_list = QListWidget()
         self.db_list.setFixedHeight(130)
 
-        self.repeat = QComboBox()
+        self.repeat = combo()
         self.repeat.addItem("Every day", REPEAT_DAILY)
         self.repeat.addItem("On chosen days", REPEAT_DAYS)
         self.repeat.addItem("Every few hours", REPEAT_HOURS)
