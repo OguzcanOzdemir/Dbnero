@@ -41,7 +41,7 @@ SQL Server uses an ODBC driver. Windows already includes one. On macOS and Linux
 - **Restore safely:** a new database by default. Replacing one requires typing its name, takes a safety backup first and compares the restored schema with the backup.
 - **Compare** a backup with a live database, two backups or two live databases. Schema differences cover tables, columns, keys, indexes, views, triggers and routines. Data differences are row-level by primary key, using a temporary restore.
 - **Reports** in HTML, JSON or CSV. Sample rows are included only if you agree.
-- **Passwords** stay in the system keychain, never in the catalog, logs or command lines.
+- **Passwords** are saved in the system keychain (untick "Save password" to keep one only until dbnero closes), never in the catalog, logs or command lines. If Windows refuses keychain access, they are saved encrypted for your Windows user instead.
 - **Portable archive:** plain files with manifests. If the catalog is lost, *Import from folder* rebuilds it.
 - **Light and dark themes** that follow your system.
 

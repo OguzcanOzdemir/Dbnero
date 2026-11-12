@@ -1,3 +1,5 @@
+import sys
+
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
@@ -115,3 +117,96 @@ def test_windows_credential_error_falls_back_to_session(monkeypatch):
     assert store.get_password("conn") == "pw"
     store.delete_password("conn")
     assert store.get_password("conn") is None
+
+
+class _BrokenStore:
+    def set_password(self, *a):
+        from dbnero.security.credentials import CredentialStoreUnavailable
+
+        raise CredentialStoreUnavailable("1312")
+
+    get_password = set_password
+    delete_password = set_password
+
+
+def _xor(data: bytes) -> bytes:
+    return bytes(b ^ 0x5A for b in data)
+
+
+def test_encrypted_file_store_roundtrip(tmp_path):
+    from dbnero.security.credentials import EncryptedFileCredentialStore
+
+    path = tmp_path / "credentials.dat"
+    store = EncryptedFileCredentialStore(path, encrypt=_xor, decrypt=_xor)
+    assert store.get_password("a") is None
+    store.set_password("a", "s3cret")
+    store.set_password("b", "other")
+    assert "s3cret" not in path.read_text("utf-8")
+    again = EncryptedFileCredentialStore(path, encrypt=_xor, decrypt=_xor)
+    assert again.get_password("a") == "s3cret"
+    again.delete_password("a")
+    assert again.get_password("a") is None and again.get_password("b") == "other"
+
+
+def test_keyring_failure_falls_back_to_encrypted_file(tmp_path):
+    """Windows 1312: passwords are still saved, in the DPAPI file."""
+    from dbnero.security.credentials import (
+        EncryptedFileCredentialStore,
+        SessionFallbackCredentialStore,
+    )
+
+    path = tmp_path / "credentials.dat"
+    file_store = EncryptedFileCredentialStore(path, encrypt=_xor, decrypt=_xor)
+    store = SessionFallbackCredentialStore(_BrokenStore(), fallbacks=[file_store])
+    assert store.is_available()
+    store.set_password("conn", "pw")
+    assert path.exists()
+    # A new run (fresh store objects) still finds the password.
+    store2 = SessionFallbackCredentialStore(
+        _BrokenStore(),
+        fallbacks=[EncryptedFileCredentialStore(path, encrypt=_xor, decrypt=_xor)],
+    )
+    assert store2.get_password("conn") == "pw"
+
+
+def test_session_only_password(fake_keyring):
+    from dbnero.security.credentials import SessionFallbackCredentialStore
+
+    store = SessionFallbackCredentialStore()
+    store.set_password("a", "saved")
+    store.set_session_password("a", "temp")
+    assert ("dbnero.connections", "a") not in fake_keyring.data
+    assert store.get_password("a") == "temp" and store.is_session_only("a")
+    store.set_password("a", "saved2")
+    assert not store.is_session_only("a")
+    assert fake_keyring.data[("dbnero.connections", "a")] == "saved2"
+
+
+def test_connection_service_remember_flag(fake_keyring, tmp_path):
+    from dbnero.core.connection_service import ConnectionService
+    from dbnero.core.models import ConnectionProfile, Engine
+    from dbnero.core.settings import Settings
+    from dbnero.security.credentials import SessionFallbackCredentialStore
+    from dbnero.storage.catalog import Catalog
+
+    catalog = Catalog(tmp_path / "c.db")
+    svc = ConnectionService(catalog, SessionFallbackCredentialStore(), Settings())
+    p = ConnectionProfile(name="x", engine=Engine.POSTGRESQL, host="h", port=5432, username="u")
+    svc.save(p, "pw", remember=False)
+    assert svc.has_password(p.id) and svc.password_is_session_only(p.id)
+    assert not fake_keyring.data
+    svc.save(p, None, remember=True)  # tick "Save password" without retyping
+    assert fake_keyring.data[("dbnero.connections", p.id)] == "pw"
+    assert not svc.password_is_session_only(p.id)
+    catalog.close()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI")
+def test_real_dpapi_roundtrip(tmp_path):
+    from dbnero.security.credentials import EncryptedFileCredentialStore
+
+    store = EncryptedFileCredentialStore(tmp_path / "credentials.dat")
+    store.set_password("a", "pässwörd")
+    assert EncryptedFileCredentialStore(tmp_path / "credentials.dat").get_password("a") == (
+        "pässwörd"
+    )

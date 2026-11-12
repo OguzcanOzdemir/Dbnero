@@ -45,9 +45,10 @@ from dbnero.ui.common import (
     JobProgress,
     Page,
     StatusDelegate,
+    backup_choice_label,
     button,
     error_text,
-    fmt_local,
+    muted,
     plural,
     run_async,
 )
@@ -56,17 +57,23 @@ MODE_BACKUP_LIVE = "backup_live"
 MODE_BACKUP_BACKUP = "backup_backup"
 MODE_LIVE_LIVE = "live_live"
 
+# Comparing never changes anything, so name differences by where things are.
 KIND_TEXT = {
-    ChangeKind.ADDED: "Added",
-    ChangeKind.REMOVED: "Removed",
-    ChangeKind.CHANGED: "Changed",
+    ChangeKind.ADDED: "Only in To",
+    ChangeKind.REMOVED: "Only in From",
+    ChangeKind.CHANGED: "Different",
 }
 KIND_TONE = {
     ChangeKind.ADDED: "success",
     ChangeKind.REMOVED: "danger",
     ChangeKind.CHANGED: "warning",
 }
-METHOD_TEXT = {"keyed": "By key", "fingerprint": "Fingerprint", "count_only": "Row count"}
+METHOD_TEXT = {
+    "keyed": "By key",
+    "fingerprint": "Fingerprint",
+    "count_only": "Row count",
+    "one_side": "One side only",
+}
 CATEGORY_TEXT = {
     "table": "Tables",
     "column": "Columns",
@@ -123,10 +130,9 @@ class SourcePicker(Card):
             if rec.status not in {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}:
                 continue
             snap = "" if rec.schema_snapshot_path else " (no schema snapshot)"
-            self.backup.addItem(
-                f"{rec.database_name} · {fmt_local(rec.created_at_utc)} · {rec.server_label}{snap}",
-                rec.backup_id,
-            )
+            label = backup_choice_label(rec) + snap
+            self.backup.addItem(label, rec.backup_id)
+            self.backup.setItemData(self.backup.count() - 1, label, Qt.ItemDataRole.ToolTipRole)
         self.backup.setCurrentIndex(max(self.backup.findData(current_backup), 0))
         current_conn = self.connection.currentData()
         self.connection.blockSignals(True)
@@ -270,6 +276,13 @@ class ComparePage(Page):
         self.progress.log.setVisible(False)
         self.root.addWidget(self.progress)
 
+        self.root.addWidget(
+            muted(
+                "Comparing only reads both sides; it never changes either database. "
+                "“Only in To” / “Only in From” say where something exists, "
+                "“Different” means it exists in both but is not the same."
+            )
+        )
         self.tabs = QTabWidget()
         schema_split = QSplitter(Qt.Orientation.Horizontal)
         self.tree = QTreeWidget()
@@ -289,11 +302,11 @@ class ComparePage(Page):
             [
                 "Table",
                 "Method",
-                "From rows",
-                "To rows",
-                "Added",
-                "Removed",
-                "Changed",
+                "Rows in From",
+                "Rows in To",
+                "Only in To",
+                "Only in From",
+                "Different",
                 "Result",
                 "Note",
             ]

@@ -195,7 +195,8 @@ def export_html(report: CompareReport, path: Path, include_row_data: bool = Fals
         parts.append(f"<h2>Data: {e(d['left'])} ↔ {e(d['right'])}</h2>")
         parts.append(
             "<table><tr><th>Table</th><th>Method</th><th>Left rows</th><th>Right rows</th>"
-            "<th>Added</th><th>Removed</th><th>Changed</th><th>Result</th><th>Note</th></tr>"
+            "<th>Only in right</th><th>Only in left</th><th>Different</th>"
+            "<th>Result</th><th>Note</th></tr>"
         )
         for t in d["tables"]:
             res = {

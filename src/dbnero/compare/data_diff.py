@@ -27,6 +27,7 @@ class DataMethod(StrEnum):
     KEYED = "keyed"
     FINGERPRINT = "fingerprint"
     COUNT_ONLY = "count_only"
+    ONE_SIDE = "one_side"  # the table exists in only one of the databases
 
 
 @dataclass(slots=True)
@@ -98,6 +99,7 @@ def compare_data(
         wanted = set(opts.tables)
         names = [n for n in names if n in wanted]
     result.skipped = sorted(lmap.keys() ^ rmap.keys())
+    wanted_set = set(opts.tables) if opts.tables is not None else None
 
     for i, name in enumerate(names):
         if ctx:
@@ -106,6 +108,24 @@ def compare_data(
         result.tables.append(
             _compare_table(left, left_db, lmap[name], right, right_db, rmap[name], opts, ctx)
         )
+    # Tables that exist on one side only still show up, with their row count.
+    for name in result.skipped:
+        if wanted_set is not None and name not in wanted_set:
+            continue
+        if ctx:
+            ctx.raise_if_cancelled()
+        if name in lmap:
+            t = lmap[name]
+            rows = left.count_rows(left_db, t.schema, t.name)
+            diff = TableDataDiff(name, DataMethod.ONE_SIDE, left_rows=rows, removed=rows)
+            diff.note = "Table exists only in From"
+        else:
+            t = rmap[name]
+            rows = right.count_rows(right_db, t.schema, t.name)
+            diff = TableDataDiff(name, DataMethod.ONE_SIDE, right_rows=rows, added=rows)
+            diff.note = "Table exists only in To"
+        diff.identical = False
+        result.tables.append(diff)
     if ctx:
         ctx.progress(1.0, "Data comparison finished")
     return result

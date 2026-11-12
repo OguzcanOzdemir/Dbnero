@@ -211,6 +211,12 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Geri Yükle: sunucu ve hedef seçimi ("yeni veritabanı" / "var olanın yerine" listeden), orijinal ad otomatik
 - [x] Yedekler: etiket filtresi listeden
 - [x] Windows 1312 (Kimlik Bilgisi Yöneticisi) çökmesi, konsol pencereleri, log klasörü yazılamazsa çökme düzeltildi
+- [x] Koyu temada onay kutuları, seçenek düğmeleri ve açılır ok işaretleri görünüyor (QProxyStyle ile çiziliyor)
+- [x] Karşılaştır: "Added/Changed" yerine "Only in From / Only in To / Different"; karşılaştırmanın salt-okunur olduğu belirtiliyor
+- [x] Veri karşılaştırma: yalnızca bir tarafta olan tablolar da satır sayısıyla listeleniyor (tamamen farklı veritabanları boş gelmiyor)
+- [x] Yedek seçimlerinde açıklama ve etiketler görünüyor; Yedekler tablosunda Tags sütunu
+- [x] Bağlantılarda "Save password" (varsayılan açık); Windows'ta kasa yoksa DPAPI ile şifreli dosya
+- [x] Geri Yükle: tek hedef alanı; ad varsa onay kutusuyla yerine yazılır, yoksa oluşturulur
 - [ ] macOS/Linux için SQL Server ODBC sürücüsünü gömmek (sürücü sistem bileşeni; ileride saf-Python TDS sürücüsü değerlendirilebilir)
 - [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
 - [ ] macOS Intel derlemesi

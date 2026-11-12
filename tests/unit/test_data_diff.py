@@ -79,3 +79,14 @@ def test_count_only_and_skipped():
     assert res.tables[0].method is DataMethod.COUNT_ONLY and res.tables[0].identical is False
     assert res.skipped == ["public.only_left"]
     assert _run(a, b, tables=[]).tables == []
+
+
+def test_tables_on_one_side_are_listed():
+    a = {"customers": FakeTable(["id"], ["id"], [(1,), (2,)])}
+    b = {"invoices": FakeTable(["id"], ["id"], [(1,)])}
+    res = _run(a, b)
+    by_name = {t.table: t for t in res.tables}
+    assert by_name["public.customers"].method is DataMethod.ONE_SIDE
+    assert by_name["public.customers"].left_rows == 2 and by_name["public.customers"].removed == 2
+    assert by_name["public.invoices"].right_rows == 1 and by_name["public.invoices"].added == 1
+    assert not res.identical

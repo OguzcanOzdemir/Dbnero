@@ -94,6 +94,12 @@ class ConnectionsPage(Page):
         self.username = QLineEdit()
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.save_password = QCheckBox("Save password")
+        self.save_password.setChecked(True)
+        self.save_password.setToolTip(
+            "Saved in your system keychain so you don't type it again.\n"
+            "Untick to keep it only until dbnero closes."
+        )
         self.password_hint = muted()
         form.addRow("Name", self.name)
         form.addRow("Engine", self.engine)
@@ -101,6 +107,7 @@ class ConnectionsPage(Page):
         form.addRow("Sign in with", self.auth)
         form.addRow("User", self.username)
         form.addRow("Password", self.password)
+        form.addRow("", self.save_password)
         form.addRow("", self.password_hint)
         form_card.body.addLayout(form)
 
@@ -223,8 +230,17 @@ class ConnectionsPage(Page):
         self.username.setText(p.username)
         self.password.clear()
         has_pw = self.app.connections.has_password(p.id)
-        hint = "A password is saved. Type a new one to replace it." if has_pw else ""
-        if not self.app.connections.credential_store_available():
+        session_only = has_pw and self.app.connections.password_is_session_only(p.id)
+        can_save = self.app.connections.credential_store_available()
+        self.save_password.setChecked(can_save and not session_only)
+        self.save_password.setVisible(can_save)
+        if session_only:
+            hint = "The password is kept until you close dbnero. Tick Save password to keep it."
+        elif has_pw:
+            hint = "A password is saved. Type a new one to replace it."
+        else:
+            hint = ""
+        if not can_save:
             hint += (
                 " No system keychain was found, so passwords are only kept until you close dbnero."
             )
@@ -267,6 +283,7 @@ class ConnectionsPage(Page):
         windows = AuthType(self.auth.currentData()) is AuthType.WINDOWS
         self.username.setEnabled(not windows)
         self.password.setEnabled(not windows)
+        self.save_password.setEnabled(not windows)
 
     def _browse_local_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Local path to the server backup folder")
@@ -326,7 +343,7 @@ class ConnectionsPage(Page):
         profile = self._form_profile()
         password = self.password.text() or None
         try:
-            self.app.connections.save(profile, password)
+            self.app.connections.save(profile, password, remember=self.save_password.isChecked())
         except Exception as exc:
             show_error(self, "Could not save the connection", exc)
             return

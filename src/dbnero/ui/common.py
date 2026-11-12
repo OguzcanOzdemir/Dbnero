@@ -60,6 +60,16 @@ def fmt_local(dt: datetime | None, seconds: bool = False) -> str:
     return dt.astimezone().strftime("%Y-%m-%d %H:%M:%S" if seconds else "%Y-%m-%d %H:%M")
 
 
+def backup_choice_label(rec: Any) -> str:
+    """One-line label for picking a backup: database, time, server, description, tags."""
+    parts = [rec.database_name, fmt_local(rec.created_at_utc), rec.server_label]
+    if rec.description:
+        parts.append(rec.description)
+    if rec.tags:
+        parts.append(" ".join(f"#{t}" for t in rec.tags))
+    return " · ".join(parts)
+
+
 BACKUP_STATUS_TEXT = {
     BackupStatus.PENDING: "Pending",
     BackupStatus.RUNNING: "Running",

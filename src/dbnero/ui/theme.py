@@ -10,14 +10,19 @@ rather than inverted. ``apply_theme`` follows the OS color scheme by default.
 
 from __future__ import annotations
 
-import tempfile
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtWidgets import (
+    QApplication,
+    QProxyStyle,
+    QStyle,
+    QStyleFactory,
+    QStyleOption,
+    QWidget,
+)
 
 
 class ThemeMode(StrEnum):
@@ -113,41 +118,7 @@ def resolve(mode: ThemeMode) -> Tokens:
     return DARK if scheme == Qt.ColorScheme.Dark else LIGHT
 
 
-def _check_icon(color: str) -> str:
-    """Write a check-mark SVG for QSS indicators and return its path."""
-    directory = Path(tempfile.gettempdir()) / "dbnero-theme"
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"check-{color.lstrip('#')}.svg"
-    if not path.exists():
-        path.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
-            '<path d="M3.5 8.5l3 3 6-7" '
-            f'fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" '
-            'stroke-linejoin="round"/></svg>',
-            "utf-8",
-        )
-    return path.as_posix()
-
-
-def _chevron_icon(color: str) -> str:
-    """Write a down-chevron SVG for combo boxes and return its path."""
-    directory = Path(tempfile.gettempdir()) / "dbnero-theme"
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"chevron-{color.lstrip('#')}.svg"
-    if not path.exists():
-        path.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
-            '<path d="M4 6l4 4 4-4" '
-            f'fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" '
-            'stroke-linejoin="round"/></svg>',
-            "utf-8",
-        )
-    return path.as_posix()
-
-
 def stylesheet(t: Tokens) -> str:
-    check = _check_icon(t.accent_text)
-    chevron = _chevron_icon(t.text_muted)
     return f"""
 * {{ outline: none; }}
 QWidget {{ color: {t.text}; font-size: 10pt; }}
@@ -192,24 +163,13 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus, QDateTimeEdit
 QPlainTextEdit:focus {{ border: 1px solid {t.accent}; }}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {t.text_muted};
     background: {t.surface_alt}; }}
-QComboBox {{ padding-right: 28px; }}
-QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{
-    subcontrol-origin: padding; subcontrol-position: center right; border: none;
-    width: 26px; }}
-QComboBox::down-arrow, QDateEdit::down-arrow, QDateTimeEdit::down-arrow {{
-    image: url("{chevron}"); width: 14px; height: 14px; }}
-QComboBox::down-arrow:disabled {{ image: none; }}
+/* The drop-down arrow is drawn by DbneroStyle; styling ::drop-down here
+   would hide it. */
 QComboBox:hover, QDateEdit:hover, QDateTimeEdit:hover {{ border: 1px solid {t.text_muted}; }}
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0; border: none; }}
 QComboBox QAbstractItemView {{ background: {t.surface}; border: 1px solid {t.border};
     selection-background-color: {t.accent_soft}; selection-color: {t.text}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
-QCheckBox::indicator, QListWidget::indicator {{ width: 16px; height: 16px;
-    border: 1px solid {t.text_muted if t.dark else t.border}; border-radius: 4px;
-    background: {t.surface}; }}
-QCheckBox::indicator:checked, QListWidget::indicator:checked {{ background: {t.accent};
-    border: 1px solid {t.accent}; image: url("{check}"); }}
-QCheckBox::indicator:disabled {{ background: {t.surface_alt}; }}
 
 /* Buttons */
 QPushButton {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 7px;
@@ -260,11 +220,123 @@ QMessageBox {{ background: {t.bg}; }}
 """
 
 
+class DbneroStyle(QProxyStyle):
+    """Fusion with check boxes, radio buttons and arrows drawn from the theme
+    tokens, so they stay visible in both themes without image files."""
+
+    def __init__(self, t: Tokens) -> None:
+        super().__init__(QStyleFactory.create("Fusion"))
+        self.t = t
+
+    def drawPrimitive(
+        self,
+        element: QStyle.PrimitiveElement,
+        option: QStyleOption,
+        painter: QPainter,
+        widget: QWidget | None = None,
+    ) -> None:
+        pe = QStyle.PrimitiveElement
+        if element in (pe.PE_IndicatorCheckBox, pe.PE_IndicatorItemViewItemCheck):
+            self._check_box(option, painter)
+        elif element == pe.PE_IndicatorRadioButton:
+            self._radio(option, painter)
+        elif element == pe.PE_IndicatorArrowDown:
+            self._chevron(option, painter)
+        else:
+            super().drawPrimitive(element, option, painter, widget)
+
+    def _square(self, option: QStyleOption, size: int = 16) -> QRectF:
+        r = option.rect
+        side = min(size, r.width(), r.height())
+        return QRectF(
+            r.x() + (r.width() - side) / 2 + 0.5,
+            r.y() + (r.height() - side) / 2 + 0.5,
+            side - 1,
+            side - 1,
+        )
+
+    def _states(self, option: QStyleOption) -> tuple[bool, bool, bool]:
+        st = option.state
+        flag = QStyle.StateFlag
+        return (
+            bool(st & flag.State_On),
+            bool(st & flag.State_NoChange),
+            bool(st & flag.State_Enabled),
+        )
+
+    def _check_box(self, option: QStyleOption, p: QPainter) -> None:
+        t = self.t
+        on, partial, enabled = self._states(option)
+        box = self._square(option)
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        filled = (on or partial) and enabled
+        p.setPen(QPen(QColor(t.accent if filled else (t.text_muted if t.dark else "#8A93A3")), 1.4))
+        p.setBrush(QColor(t.accent if filled else t.surface_alt if not enabled else t.surface))
+        p.drawRoundedRect(box, 4, 4)
+        if on or partial:
+            pen = QPen(QColor(t.accent_text if enabled else t.text_muted), 2.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            x, y, w, h = box.x(), box.y(), box.width(), box.height()
+            if on:
+                path = QPainterPath(QPointF(x + w * 0.24, y + h * 0.52))
+                path.lineTo(QPointF(x + w * 0.43, y + h * 0.71))
+                path.lineTo(QPointF(x + w * 0.77, y + h * 0.31))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawPath(path)
+            else:
+                p.drawLine(QPointF(x + w * 0.27, y + h / 2), QPointF(x + w * 0.73, y + h / 2))
+        p.restore()
+
+    def _radio(self, option: QStyleOption, p: QPainter) -> None:
+        t = self.t
+        on, _partial, enabled = self._states(option)
+        box = self._square(option)
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        ring = t.accent if on and enabled else (t.text_muted if t.dark else "#8A93A3")
+        p.setPen(QPen(QColor(ring), 1.4))
+        p.setBrush(QColor(t.surface if enabled else t.surface_alt))
+        p.drawEllipse(box)
+        if on:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(t.accent if enabled else t.text_muted))
+            inner = box.adjusted(
+                box.width() * 0.28, box.height() * 0.28, -box.width() * 0.28, -box.height() * 0.28
+            )
+            p.drawEllipse(inner)
+        p.restore()
+
+    def _chevron(self, option: QStyleOption, p: QPainter) -> None:
+        box = self._square(option, 12)
+        st = option.state
+        enabled = bool(st & QStyle.StateFlag.State_Enabled)
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(self.t.text_muted if enabled else self.t.border), 1.6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        x, y, w, h = box.x(), box.y(), box.width(), box.height()
+        path = QPainterPath(QPointF(x + w * 0.2, y + h * 0.38))
+        path.lineTo(QPointF(x + w * 0.5, y + h * 0.66))
+        path.lineTo(QPointF(x + w * 0.8, y + h * 0.38))
+        p.drawPath(path)
+        p.restore()
+
+
+_style: DbneroStyle | None = None
+
+
 def apply_theme(app: QApplication, mode: ThemeMode = ThemeMode.SYSTEM) -> Tokens:
     global _current
     t = resolve(mode)
+    global _style
     _current = t
-    app.setStyle("Fusion")
+    _style = DbneroStyle(t)
+    app.setStyle(_style)
     pal = QPalette()
     for role, color in (
         (QPalette.ColorRole.Window, t.bg),

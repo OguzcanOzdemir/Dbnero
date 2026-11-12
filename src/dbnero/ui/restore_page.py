@@ -5,15 +5,12 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
@@ -25,7 +22,6 @@ from dbnero.core.restore_service import (
     PreflightReport,
     RestoreOutcome,
     Severity,
-    suggest_target_name,
 )
 from dbnero.storage.catalog import BackupFilter
 from dbnero.ui.common import (
@@ -35,10 +31,10 @@ from dbnero.ui.common import (
     JobBridge,
     JobProgress,
     Page,
+    backup_choice_label,
     button,
     error_text,
     fmt_bytes,
-    fmt_local,
     muted,
     run_async,
     tone_colors,
@@ -58,8 +54,8 @@ class RestorePage(Page):
     def __init__(self, app: AppContext, bridge: JobBridge, parent: QWidget | None = None) -> None:
         super().__init__(
             "Restore",
-            "Restores go into a new database by default. Replacing an existing one needs "
-            "your explicit confirmation.",
+            "Restore a backup into its database, or into any database you pick or name. "
+            "Replacing an existing database asks for confirmation first.",
             parent,
         )
         self.app = app
@@ -90,35 +86,18 @@ class RestorePage(Page):
         form.addRow("Server", self.target_conn)
         tgt.body.addLayout(form)
 
-        # Restore as a new database (default) or replace one that exists.
-        self.as_new = QRadioButton("As a new database")
-        self.overwrite = QRadioButton("Replace an existing database")
-        self.as_new.setChecked(True)
-        self.mode_group = QButtonGroup(self)
-        self.mode_group.addButton(self.as_new)
-        self.mode_group.addButton(self.overwrite)
-        self.target_db = QLineEdit()
-        self.target_db.setPlaceholderText("Name of the new database")
-        self.target_db.textChanged.connect(self._on_name_changed)
-        self.target_db.textEdited.connect(self._on_name_edited)
+        # One field: pick the database to replace (the backup's own database is
+        # preselected) or type a name that does not exist yet to create it.
+        self.target_db = QComboBox()
+        self.target_db.setEditable(True)
+        self.target_db.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        if (edit := self.target_db.lineEdit()) is not None:
+            edit.setPlaceholderText("Database to restore into")
+        self.target_db.currentTextChanged.connect(self._on_name_changed)
         self.name_hint = muted()
-        self.replace_db = QComboBox()
-        self.replace_db.setPlaceholderText("Choose the database to replace")
-        self.replace_db.currentIndexChanged.connect(self._invalidate)
-        new_row = QFormLayout()
-        new_row.setContentsMargins(26, 0, 0, 0)
-        new_row.addRow("Name", self.target_db)
-        new_row.addRow("", self.name_hint)
-        replace_row = QFormLayout()
-        replace_row.setContentsMargins(26, 0, 0, 0)
-        replace_row.addRow("Database", self.replace_db)
-        tgt.body.addWidget(self.as_new)
-        tgt.body.addLayout(new_row)
-        tgt.body.addWidget(self.overwrite)
-        tgt.body.addLayout(replace_row)
-        self.as_new.toggled.connect(self._on_mode_changed)
+        form.addRow("Database", self.target_db)
+        form.addRow("", self.name_hint)
         self._target_dbs: list[str] = []
-        self._name_touched = False
         self._loading = False
         self.advanced = Collapsible("Advanced options")
         self.protective = QCheckBox("Back up the existing database before replacing it")
@@ -142,9 +121,8 @@ class RestorePage(Page):
         checks.body.addWidget(self.checks, 1)
         self.confirm_banner = Banner("danger")
         checks.body.addWidget(self.confirm_banner)
-        self.confirm = QLineEdit()
-        self.confirm.setPlaceholderText("Type the database name to confirm")
-        self.confirm.textChanged.connect(self._update_buttons)
+        self.confirm = QCheckBox("Yes, replace this database")
+        self.confirm.toggled.connect(self._update_buttons)
         checks.body.addWidget(self.confirm)
         row = QHBoxLayout()
         self.btn_check = button("Run checks", on_click=self.run_preflight)
@@ -179,10 +157,9 @@ class RestorePage(Page):
         for rec in self.app.catalog.list_backups(BackupFilter(limit=500)):
             if rec.status not in {BackupStatus.SUCCEEDED, BackupStatus.UNVERIFIED}:
                 continue
-            label = f"{rec.database_name} · {fmt_local(rec.created_at_utc)} · {rec.server_label}"
-            if rec.description:
-                label += f" · {rec.description}"
+            label = backup_choice_label(rec)
             self.backup.addItem(label, rec.backup_id)
+            self.backup.setItemData(self.backup.count() - 1, label, Qt.ItemDataRole.ToolTipRole)
         idx = self.backup.findData(current)
         self.backup.setCurrentIndex(idx if idx >= 0 else 0)
         self.backup.blockSignals(False)
@@ -222,95 +199,67 @@ class RestorePage(Page):
 
     # -- target selection -------------------------------------------------
 
-    def _on_mode_changed(self) -> None:
-        new = self.as_new.isChecked()
-        self.target_db.setEnabled(new)
-        self.replace_db.setEnabled(not new and bool(self._target_dbs))
-        self.protective.setEnabled(not new)
-        self._invalidate()
-
-    def _on_name_edited(self) -> None:
-        self._name_touched = True
-
     def _on_name_changed(self) -> None:
         self._update_name_hint()
         self._invalidate()
 
     def _update_name_hint(self) -> None:
-        name = self.target_db.text().strip()
-        if name and name in self._target_dbs:
-            self.name_hint.setText(
-                f"“{name}” already exists on this server. Choose another name, or "
-                "select “Replace an existing database”."
-            )
+        name = self.target_db.currentText().strip()
+        if not name or self._loading:
+            text = ""
+        elif name in self._target_dbs:
+            text = f"“{name}” exists on this server and will be replaced."
         else:
-            self.name_hint.setText("")
-        self.name_hint.setVisible(bool(self.name_hint.text()))
-
-    def _default_new_name(self) -> str:
-        rec = self._record()
-        if rec is None:
-            return ""
-        if rec.database_name not in self._target_dbs:
-            return rec.database_name
-        return suggest_target_name(rec)
+            text = f"“{name}” does not exist yet and will be created."
+        self.name_hint.setText(text)
+        self.name_hint.setVisible(bool(text))
 
     def _on_target_server_changed(self) -> None:
         conn_id = self.target_conn.currentData()
+        rec = self._record()
         self._target_dbs = []
-        self.replace_db.clear()
-        self.replace_db.setEnabled(False)
+        self.target_db.blockSignals(True)
+        self.target_db.clear()
+        self.target_db.setEditText(rec.database_name if rec else "")
+        self.target_db.blockSignals(False)
         self._invalidate()
         if not conn_id:
             return
-        self.replace_db.setPlaceholderText("Loading databases…")
         self._loading = True
+        self._update_name_hint()
 
         def ok(names: list[str]) -> None:
             if self.target_conn.currentData() != conn_id:
                 return
             self._loading = False
             self._target_dbs = names
-            self.replace_db.clear()
-            self.replace_db.addItems(names)
-            self.replace_db.setPlaceholderText(
-                "Choose the database to replace" if names else "No databases on this server"
-            )
-            rec = self._record()
-            if rec is not None and rec.database_name in names:
-                self.replace_db.setCurrentText(rec.database_name)
-            else:
-                self.replace_db.setCurrentIndex(-1)
-            if not self._name_touched:
-                self.target_db.blockSignals(True)
-                self.target_db.setText(self._default_new_name())
-                self.target_db.blockSignals(False)
-            self._update_name_hint()
-            self._on_mode_changed()
+            wanted = self.target_db.currentText().strip() or (rec.database_name if rec else "")
+            self.target_db.blockSignals(True)
+            self.target_db.clear()
+            self.target_db.addItems(names)
+            self.target_db.setEditText(wanted)
+            self.target_db.blockSignals(False)
+            self._on_name_changed()
 
         def fail(exc: BaseException) -> None:
             if self.target_conn.currentData() != conn_id:
                 return
             self._loading = False
-            self.replace_db.setPlaceholderText("Could not connect to this server")
             self.status_banner.show_message(
                 f"Could not list databases on this server: {error_text(exc)}", "warning"
             )
-            if not self._name_touched:
-                self.target_db.setText(self._default_new_name())
+            self._update_name_hint()
 
         run_async(lambda: self.app.connections.list_databases(conn_id), ok, fail)
 
     def _target_name(self) -> str:
-        if self.overwrite.isChecked():
-            return self.replace_db.currentText().strip()
-        return self.target_db.text().strip()
+        return self.target_db.currentText().strip()
 
     def _invalidate(self) -> None:
         self._report = None
         self.checks.clear()
         self.confirm_banner.show_message("")
-        self.confirm.clear()
+        self.confirm.setChecked(False)
         self.confirm.setVisible(False)
         self._update_buttons()
 
@@ -318,7 +267,7 @@ class RestorePage(Page):
         idle = self._job is None
         ready = self._report is not None and self._report.can_proceed and idle
         if ready and self._report is not None and self._report.target_exists:
-            ready = self.confirm.text() == self._report.target_database
+            ready = self.confirm.isChecked()
         self.btn_start.setEnabled(ready)
         self.btn_check.setEnabled(idle and self.backup.currentData() is not None)
 
@@ -333,7 +282,7 @@ class RestorePage(Page):
                 "Add a connection for this database engine first.", "warning"
             )
             return
-        overwrite = self.overwrite.isChecked()
+        overwrite = True  # this page restores into the chosen database
         self.btn_check.setEnabled(False)
         self.status_banner.show_message("Running checks…", "info")
 
@@ -350,7 +299,7 @@ class RestorePage(Page):
             if report.can_proceed and report.target_exists:
                 self.confirm_banner.show_message(
                     f"All data in “{report.target_database}” will be replaced by the backup. "
-                    "Type the database name below to continue."
+                    "Confirm below to continue."
                 )
                 self.confirm.setVisible(True)
             if report.can_proceed:
@@ -376,8 +325,8 @@ class RestorePage(Page):
         backup_id = report.backup.backup_id
         conn_id = report.target_connection_id
         target = report.target_database
-        overwrite = self.overwrite.isChecked()
-        confirmation = self.confirm.text() if report.target_exists else None
+        overwrite = report.target_exists
+        confirmation = target if report.target_exists and self.confirm.isChecked() else None
         protective = self.protective.isChecked()
         verify = self.verify.isChecked()
 

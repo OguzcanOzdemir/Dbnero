@@ -73,14 +73,14 @@ Yeni motor eklemek = `adapters/` altında bu protokolü uygulamak + entegrasyon 
 1. **Toplu yedekte her veritabanı ayrı dosya + ayrı katalog kaydı** üretir. Bir alt işin başarısızlığı diğerlerini iptal etmez veya gizlemez.
 2. `created_at_utc` sistem tarafından atanır ve **değiştirilemez**. Kullanıcı yalnızca ayrı, isteğe bağlı bir "referans tarihi" girebilir.
 3. Geri yükleme yalnızca **aynı motor içinde**. Motorlar arası taşıma kapsam dışıdır.
-4. Var olan veritabanının üzerine yazma **varsayılan olarak kapalı**; açık kullanıcı onayı gerekir.
+4. Geri yükleme tek bir hedef veritabanı adı alır (varsayılan: yedeğin kendi adı). Hedef varsa üzerine yazılır, ancak yalnızca kullanıcı "Yes, replace this database" onayını işaretledikten sonra; onaysız var olan veritabanına asla yazılmaz.
 5. Geri yükleme bir transaction gibi geri alınabilir **varsayılmaz**; UI riskleri açıkça bildirir.
 6. Yedek dosyaları önce geçici adla yazılır, başarı + checksum sonrası **atomik olarak** son adına taşınır. Yarım dosya asla "başarılı" görünmez.
 7. Her yedek için SHA-256 hesaplanır ve `manifest.json` yedeğin yanına yazılır; katalog kaybolursa arşiv manifest'lerden yeniden içe aktarılabilmelidir.
 
 ## Güvenlik kuralları
 
-- Parolalar ve sırlar **yalnızca** `security/credentials.py` (keyring) üzerinden. SQLite kataloğuna, manifest'e, loglara veya **komut satırı argümanlarına** yazılmaz.
+- Parolalar ve sırlar **yalnızca** `security/credentials.py` (keyring / Windows DPAPI dosyası) üzerinden. SQLite kataloğuna, manifest'e, loglara veya **komut satırı argümanlarına** yazılmaz.
   - `pg_dump`/`pg_restore` için `PGPASSWORD` ortam değişkeni veya geçici `.pgpass` (0600).
   - `mysqldump`/`mysql` için geçici `--defaults-extra-file` (0600) — `-p<parola>` argümanı **kullanma**.
 - `subprocess` çağrılarında **`shell=True` kullanma**; argümanları liste olarak ver.
@@ -171,7 +171,7 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 
 ## Parolalar
 
-`AppContext` varsayılan olarak `SessionFallbackCredentialStore` kullanır: OS anahtar kasası varsa oraya yazar; yoksa parolayı **yalnızca bellekte, oturum boyunca** tutar ve `credential_store_available()` False döner (UI uyarı gösterir). Parolayı diske yazan bir geri dönüş ekleme.
+`AppContext` varsayılan olarak `default_credential_store()` kullanır: önce OS anahtar kasası; Windows'ta kasa erişimi reddederse (ör. hata 1312) yapılandırma klasöründeki `credentials.dat` dosyasına **DPAPI ile şifrelenmiş** olarak yazar (yalnızca aynı Windows kullanıcısı çözebilir). Hiçbiri yoksa parola **yalnızca bellekte, oturum boyunca** tutulur ve `credential_store_available()` False döner (UI uyarı gösterir). Bağlantı formundaki "Save password" işareti kaldırılırsa parola `set_session_password` ile yalnızca oturumluk tutulur ve kayıtlı kopya silinir. Parolayı **şifresiz** diske yazan bir geri dönüş ekleme.
 
 ## Sürüm yayınlama
 

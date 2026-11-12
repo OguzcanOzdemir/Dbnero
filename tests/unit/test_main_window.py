@@ -91,36 +91,35 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     assert restore.backup.currentData() == rec.backup_id
     restore.target_conn.setCurrentIndex(restore.target_conn.findData(world.pg2.id))
     qtbot.waitUntil(lambda: not restore._loading, timeout=5000)
-    # pg2 is empty, so the original name is proposed for the new database.
-    assert restore.as_new.isChecked()
-    assert restore.target_db.text() == rec.database_name
-    restore.target_db.setText("restored_db")
+    # The backup's own database is proposed; pg2 does not have it yet.
+    assert restore.target_db.currentText() == rec.database_name
+    assert "will be created" in restore.name_hint.text()
+    restore.target_db.setEditText("restored_db")
     restore.run_preflight()
     qtbot.waitUntil(lambda: restore._report is not None, timeout=5000)
+    assert not restore._report.target_exists
     assert restore.btn_start.isEnabled()
     restore.start()
     _wait_jobs(qtbot, app)
     qtbot.waitUntil(lambda: "Restore finished" in restore.status.text(), timeout=5000)
     assert "restored_db" in world.servers["pg2"].databases
 
-    # Replacing an existing database: pick it from the list, then type its name.
+    # Replacing an existing database: it is in the list and needs a confirmation tick.
     restore.select_backup(rec.backup_id)
     restore.target_conn.setCurrentIndex(restore.target_conn.findData(world.pg2.id))
     qtbot.waitUntil(lambda: not restore._loading, timeout=5000)
-    assert restore.replace_db.findText("restored_db") >= 0
-    restore.overwrite.setChecked(True)
-    restore.replace_db.setCurrentText("restored_db")
+    assert restore.target_db.findText("restored_db") >= 0
+    restore.target_db.setCurrentText("restored_db")
+    assert "will be replaced" in restore.name_hint.text()
     restore.run_preflight()
     qtbot.waitUntil(lambda: restore._report is not None, timeout=5000)
     assert restore._report.target_exists and not restore.confirm.isHidden()
     assert not restore.btn_start.isEnabled()
-    restore.confirm.setText("restored_db")
+    restore.confirm.setChecked(True)
     assert restore.btn_start.isEnabled()
-
-    # A name that already exists is flagged for a new database.
-    restore.as_new.setChecked(True)
-    restore.target_db.setText("restored_db")
-    assert "already exists" in restore.name_hint.text()
+    restore.start()
+    _wait_jobs(qtbot, app)
+    qtbot.waitUntil(lambda: "Restore finished" in restore.status.text(), timeout=5000)
 
     # Compare backup with live database
     window.archive.select_backup(rec.backup_id)
@@ -146,7 +145,7 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     assert window.jobs.logs.toPlainText()
 
     window.show_page("overview")
-    assert window.overview.card_total.value.text() == "2"
+    assert window.overview.card_total.value.text() == "3"  # incl. protective backup
 
 
 def test_settings_page_saves(window, world):

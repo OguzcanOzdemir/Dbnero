@@ -45,7 +45,7 @@ from dbnero.ui.common import (
     show_error,
 )
 
-COLUMNS = ["Created", "Database", "Server", "Size", "Status", "Description"]
+COLUMNS = ["Created", "Database", "Server", "Size", "Status", "Tags", "Description"]
 STATUS_COL = 4
 SIZE_COL = 3
 
@@ -232,6 +232,7 @@ class ArchivePage(Page):
                 f"{rec.server_label} · {ENGINE_SHORT[rec.engine]}",
                 fmt_bytes(rec.file_size),
                 BACKUP_STATUS_TEXT[rec.status],
+                ", ".join(rec.tags),
                 rec.description,
             ]
             for c, value in enumerate(values):

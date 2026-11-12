@@ -95,8 +95,12 @@ class ConnectionService:
         if profile.auth_type is AuthType.PASSWORD and not profile.username.strip():
             raise ValidationError("User name is required")
 
-    def save(self, profile: ConnectionProfile, password: str | None = None) -> None:
-        """Save a profile. ``password=None`` keeps the stored password; ``""`` clears it."""
+    def save(
+        self, profile: ConnectionProfile, password: str | None = None, remember: bool = True
+    ) -> None:
+        """Save a profile. ``password=None`` keeps the stored password; ``""`` clears it.
+        ``remember=False`` keeps the password for this session only and removes
+        any saved copy."""
         self.validate(profile)
         if any(
             c.name.casefold() == profile.name.casefold() and c.id != profile.id
@@ -104,11 +108,19 @@ class ConnectionService:
         ):
             raise ValidationError(f"A connection named '{profile.name}' already exists")
         self.catalog.save_connection(profile)
-        if password is not None:
+        if password == "":
+            self.credentials.delete_password(profile.id)
+            return
+        session_only = getattr(self.credentials, "set_session_password", None)
+        if not remember and session_only is not None:
+            password = password or self.credentials.get_password(profile.id)
+            if password:
+                session_only(profile.id, password)
+        else:
+            if password is None and self.password_is_session_only(profile.id):
+                password = self.credentials.get_password(profile.id)
             if password:
                 self.credentials.set_password(profile.id, password)
-            else:
-                self.credentials.delete_password(profile.id)
 
     def delete(self, connection_id: str) -> None:
         self.catalog.delete_connection(connection_id)
@@ -116,6 +128,11 @@ class ConnectionService:
 
     def has_password(self, connection_id: str) -> bool:
         return bool(self.credentials.get_password(connection_id))
+
+    def password_is_session_only(self, connection_id: str) -> bool:
+        """True when the password is only kept until the app closes."""
+        check = getattr(self.credentials, "is_session_only", None)
+        return bool(check(connection_id)) if check is not None else False
 
     # -- adapters ---------------------------------------------------------
 

@@ -11,8 +11,8 @@ from dbnero.core.compare_service import CompareService
 from dbnero.core.connection_service import ConnectionService
 from dbnero.core.jobs import JobManager
 from dbnero.core.restore_service import RestoreService
-from dbnero.core.settings import Settings, save_settings
-from dbnero.security.credentials import CredentialStore, SessionFallbackCredentialStore
+from dbnero.core.settings import Settings, config_dir, save_settings
+from dbnero.security.credentials import CredentialStore, default_credential_store
 from dbnero.storage.catalog import Catalog
 
 
@@ -38,7 +38,7 @@ class AppContext:
         settings_path: Path | None = None,
     ) -> AppContext:
         catalog = catalog or Catalog(settings.resolved_catalog_path())
-        credentials = credentials or SessionFallbackCredentialStore()
+        credentials = credentials or default_credential_store(config_dir())
         connections = ConnectionService(catalog, credentials, settings)
         backups = BackupService(catalog, connections, settings)
         jobs = JobManager(catalog, max_workers=max(2, settings.max_parallel_jobs))
