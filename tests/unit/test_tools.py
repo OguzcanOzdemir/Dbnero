@@ -24,3 +24,19 @@ def test_inspect_python():
     info = inspect_tool("python", sys.executable)
     assert info.available
     assert info.version and info.version.startswith("3.")
+
+
+def test_list_odbc_drivers_survives_broken_driver_manager(monkeypatch):
+    import builtins
+
+    from dbnero.adapters.tools import list_odbc_drivers
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pyodbc":
+            raise ImportError("dlopen: libodbc.2.dylib not found")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert list_odbc_drivers() == []

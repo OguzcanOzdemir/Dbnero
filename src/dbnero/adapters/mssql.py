@@ -140,7 +140,13 @@ class MSSQLAdapter:
 
     @contextmanager
     def _connect(self, database: str | None = None) -> Iterator[Any]:
-        import pyodbc  # type: ignore[import-not-found, unused-ignore]
+        try:
+            import pyodbc  # type: ignore[import-not-found, unused-ignore]
+        except ImportError as exc:
+            raise ConnectionFailed(
+                "SQL Server support is unavailable: the ODBC driver manager could not be "
+                f"loaded ({exc}). Install Microsoft ODBC Driver 18 for SQL Server."
+            ) from None
 
         try:
             conn = pyodbc.connect(

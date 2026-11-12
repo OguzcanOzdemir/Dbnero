@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 from typing import Any
 
 from dbnero import APP_NAME, __version__
@@ -13,7 +14,7 @@ from dbnero.core.settings import load_settings, log_dir, settings_path
 log = logging.getLogger(__name__)
 
 
-def install_error_dialog(message_box: Any) -> None:
+def install_error_dialog(message_box: Any, log_file: Path | None = None) -> None:
     """Show unexpected errors to the user and log them instead of crashing."""
 
     def hook(exc_type: type[BaseException], exc: BaseException, tb: Any) -> None:
@@ -25,7 +26,8 @@ def install_error_dialog(message_box: Any) -> None:
         message_box.critical(
             None,
             APP_NAME,
-            f"Something went wrong: {text}\n\nDetails were written to the log in {log_dir()}.",
+            f"Something went wrong: {text}"
+            + (f"\n\nDetails were written to {log_file}." if log_file else ""),
         )
 
     sys.excepthook = hook
@@ -34,7 +36,7 @@ def install_error_dialog(message_box: Any) -> None:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
 
-    configure_logging(log_dir())
+    log_file = configure_logging(log_dir())
     settings = load_settings()
     log.info("Starting %s %s", APP_NAME, __version__)
 
@@ -62,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         mode = ThemeMode.SYSTEM
     apply_theme(app, mode)
 
-    install_error_dialog(QMessageBox)
+    install_error_dialog(QMessageBox, log_file)
 
     try:
         context = AppContext.create(settings, settings_path=settings_path())

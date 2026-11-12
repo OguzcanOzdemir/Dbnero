@@ -249,3 +249,27 @@ def test_mssql_share_permission_error_falls_back_to_sql(monkeypatch, tmp_path):
     assert result.extra["transfer"] == "sql"
     assert any("No read permission" in w for w in result.warnings)
     assert (tmp_path / "x.bak.partial").read_bytes().startswith(b"TAPE")
+
+
+def test_mssql_missing_driver_manager_is_a_clear_error(monkeypatch):
+    import builtins
+
+    from dbnero.adapters.base import ConnectionFailed
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pyodbc":
+            raise ImportError("libodbc.so.2: cannot open shared object file")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    a = mssql_mod.MSSQLAdapter(_profile(Engine.MSSQL, options={"odbc_driver": "X"}), "pw")
+    with pytest.raises(ConnectionFailed, match="ODBC Driver 18"):
+        a.test_connection()
+
+
+def test_tools_run_without_console_window_flag():
+    from dbnero.adapters import process
+
+    assert isinstance(process.NO_WINDOW, int)

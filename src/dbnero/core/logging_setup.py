@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import re
+import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -58,17 +60,33 @@ class SecretMaskingFilter(logging.Filter):
 masking_filter = SecretMaskingFilter()
 
 
-def configure_logging(log_dir: Path, level: int = logging.INFO) -> None:
-    log_dir.mkdir(parents=True, exist_ok=True)
+def configure_logging(log_dir: Path, level: int = logging.INFO) -> Path | None:
+    """Log to a rotating file (and stderr when there is one). Never fails:
+    if the log folder is not writable, fall back to the temp folder, then to
+    no file at all. Returns the log file in use."""
     root = logging.getLogger()
     root.setLevel(level)
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
-
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "dbnero.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8"
-    )
-    stream_handler = logging.StreamHandler()
-    for handler in (file_handler, stream_handler):
+    handlers: list[logging.Handler] = []
+    log_file: Path | None = None
+    for directory in (log_dir, Path(tempfile.gettempdir()) / "dbnero-logs"):
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            candidate = directory / "dbnero.log"
+            handlers.append(
+                logging.handlers.RotatingFileHandler(
+                    candidate, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
+                )
+            )
+            log_file = candidate
+            break
+        except OSError:
+            continue
+    # Windowed (frozen) apps on Windows have no stderr at all.
+    if sys.stderr is not None:
+        handlers.append(logging.StreamHandler())
+    for handler in handlers:
         handler.setFormatter(fmt)
         handler.addFilter(masking_filter)
         root.addHandler(handler)
+    return log_file

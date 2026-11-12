@@ -55,6 +55,7 @@ def tool_version(path: Path) -> str | None:
             text=True,
             timeout=10,
             check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -70,9 +71,10 @@ def list_odbc_drivers() -> list[str]:
     """Return installed ODBC drivers for SQL Server (empty if pyodbc missing)."""
     try:
         import pyodbc  # type: ignore[import-not-found, unused-ignore]
-    except ImportError:
+
+        drivers: list[str] = pyodbc.drivers()
+    except Exception:  # missing module, missing libodbc, broken driver manager
         return []
-    drivers: list[str] = pyodbc.drivers()
     return [d for d in drivers if "SQL Server" in d]
 
 

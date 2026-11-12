@@ -26,6 +26,8 @@ from dbnero.adapters.base import AdapterError, JobContext, OperationCancelled
 
 _POLL_SECONDS = 0.2
 _STDERR_TAIL_LINES = 200
+# On Windows a GUI app would otherwise flash a console window for every tool.
+NO_WINDOW: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _CHUNK = 1024 * 1024
 
 
@@ -93,6 +95,7 @@ def run_tool(
             stderr=subprocess.PIPE,
             env=full_env,
             shell=False,
+            creationflags=NO_WINDOW,
         )
     except OSError as exc:
         raise AdapterError(f"Could not start {argv[0]}: {exc.strerror}") from exc
