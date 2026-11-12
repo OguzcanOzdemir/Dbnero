@@ -195,6 +195,6 @@ jobs:
           body: |
             Free download for Windows, macOS and Linux. See the [download page](https://oguzcanozdemir.github.io/Dbnero/) for which file to pick.
 
-            dbnero uses each database's own client tools (pg_dump, mysqldump, the SQL Server ODBC driver); install the ones you need. The app checks them on first start.
+            Nothing else to install: the PostgreSQL and MySQL client tools come inside the app. On macOS and Linux, SQL Server needs Microsoft's ODBC Driver 18; Windows already has a driver.
 
             The builds are not code-signed yet: on Windows choose "More info → Run anyway", on macOS right-click the app and choose Open the first time.
