@@ -3,14 +3,121 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>dbnero</title>
-<meta name="description" content="Free desktop app to back up, restore and compare PostgreSQL, MySQL and SQL Server databases on Windows, macOS and Linux.">
+<title>dbnero: Free Backup &amp; Restore for PostgreSQL, MySQL and SQL Server</title>
+<meta name="description" content="dbnero is a free desktop app to back up, restore and compare PostgreSQL, MySQL and SQL Server databases on Windows, macOS and Linux. Scheduled backups, checksums, safe restores. pg_dump and mysqldump included.">
+<link rel="canonical" href="https://oguzcanozdemir.github.io/Dbnero/">
 <meta name="theme-color" content="#12151B">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta property="og:title" content="dbnero — database backups you can trust">
-<meta property="og:description" content="Back up, restore and compare PostgreSQL, MySQL and SQL Server databases. Free for Windows, macOS and Linux.">
-<meta property="og:image" content="screenshots/backups-light.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="dbnero">
+<meta property="og:url" content="https://oguzcanozdemir.github.io/Dbnero/">
+<meta property="og:title" content="dbnero: free backup and restore for PostgreSQL, MySQL and SQL Server">
+<meta property="og:description" content="Back up, restore and compare PostgreSQL, MySQL and SQL Server databases. Scheduled backups, checksums and safe restores. Free for Windows, macOS and Linux.">
+<meta property="og:image" content="https://oguzcanozdemir.github.io/Dbnero/screenshots/backups-light.png">
+<meta property="og:image:width" content="2720">
+<meta property="og:image:height" content="1720">
+<meta property="og:image:alt" content="The dbnero Backups page">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "dbnero",
+  "description": "Free desktop app to back up, restore and compare PostgreSQL, MySQL and Microsoft SQL Server databases, with scheduled backups, SHA-256 checksums and safe restores.",
+  "applicationCategory": "UtilitiesApplication",
+  "applicationSubCategory": "Database backup",
+  "operatingSystem": "Windows 10, Windows 11, macOS 11+, Linux",
+  "softwareVersion": "0.0.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "url": "https://oguzcanozdemir.github.io/Dbnero/",
+  "downloadUrl": "https://github.com/OguzcanOzdemir/Dbnero/releases/latest",
+  "screenshot": "https://oguzcanozdemir.github.io/Dbnero/screenshots/backups-light.png",
+  "codeRepository": "https://github.com/OguzcanOzdemir/Dbnero",
+  "featureList": [
+    "Back up PostgreSQL with pg_dump, MySQL with mysqldump and SQL Server with BACKUP DATABASE",
+    "Scheduled daily or hourly backups that also run while the app is closed",
+    "Keep the last N backups automatically",
+    "SHA-256 checksum and manifest for every backup",
+    "Restore into the same or a new database with safety checks",
+    "Compare schema and data of backups and live databases"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is dbnero free?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. dbnero is free and open source under the MIT license. There is no account, no subscription and no telemetry."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I back up a PostgreSQL database on Windows?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Install dbnero, add a connection with the server, port, user name and password, open Back up, tick the databases and click Back up. dbnero runs pg_dump in custom format, writes one file per database and records a SHA-256 checksum. The same steps work for MySQL and SQL Server, and on macOS and Linux."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to install pg_dump or mysqldump?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. pg_dump, pg_restore, mysqldump and mysql are included with dbnero. SQL Server uses the ODBC driver built into Windows; on macOS and Linux install Microsoft ODBC Driver 18 if you back up SQL Server."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I schedule automatic database backups?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. On the Schedules page choose every day, chosen days or every few hours, and how many backups to keep per database. Scheduled backups also run while dbnero is closed (Windows Task Scheduler, macOS launchd or a systemd timer start it). If the computer was off, the missed backup runs when it is back on and dbnero tells you about it."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I restore a SQL Server .bak file or a MySQL dump?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Open Restore, pick the backup, the server and the database to restore into. dbnero checks the file and the server first. Replacing an existing database needs an explicit confirmation, and a safety backup of it is taken first."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I compare two databases, or a backup with the live database?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Compare shows schema differences (tables, columns, keys, indexes, views, routines) and row-level data differences between a backup and a live database, two backups or two live databases. Comparing only reads both sides."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where are my database passwords stored?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only if you choose Save password, in your operating system's keychain (Windows Credential Manager, macOS Keychain or the Linux Secret Service). Passwords are never written to the catalog, logs, backup files or command lines."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which database versions are supported?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "PostgreSQL 12 and newer, MySQL 8.0 and newer, and Microsoft SQL Server 2017 and newer."
+      }
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
@@ -182,6 +289,18 @@ a.shot:focus-visible, a.frame:focus-visible { outline-offset: 4px; }
 
 footer { padding-block: 36px; color: var(--muted); font-size: 0.9rem; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
+
+/* FAQ */
+.faq { display: grid; gap: 10px; margin-top: 24px; }
+.faq details { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 18px; }
+.faq summary { cursor: pointer; font-weight: 600; list-style: none; position: relative;
+  padding-right: 28px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 0; top: -2px;
+  color: var(--muted); font-size: 1.25rem; }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { margin: 10px 0 0; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -193,13 +312,14 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#engines">Databases</a>
+        <a href="#faq">FAQ</a>
         <a href="#download">Download</a>
         <a href="https://github.com/OguzcanOzdemir/Dbnero">GitHub</a>
       </div>
     </nav>
     <div class="hero">
       <div>
-        <h1>Database backups you can actually restore.</h1>
+        <h1>PostgreSQL, MySQL and SQL Server backups you can actually restore.</h1>
         <p class="lead">dbnero backs up PostgreSQL, MySQL and SQL Server databases with their own tools, keeps every backup with a checksum and a schema snapshot, restores safely and shows what changed. Free for Windows, macOS and Linux.</p>
         <div class="cta">
           <a id="primary-download" class="btn btn-primary" href="#download">Download for free</a>
@@ -212,7 +332,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <source srcset="screenshots/backups-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1252" height="792">
           <source srcset="screenshots/backups-light-mobile.png" media="(max-width: 640px)" width="1252" height="792">
           <source srcset="screenshots/backups-dark.png" media="(prefers-color-scheme: dark)" width="2720" height="1720">
-          <img src="screenshots/backups-light.png" alt="The dbnero Backups page listing PostgreSQL, MySQL and SQL Server backups with their status and details." width="2720" height="1720">
+          <img src="screenshots/backups-light.png" alt="The dbnero Backups page listing PostgreSQL, MySQL and SQL Server backups with their status and details." width="2720" height="1720" fetchpriority="high">
         </picture>
       </a>
     </div>
@@ -281,7 +401,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <source srcset="screenshots/restore-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1124" height="636">
           <source srcset="screenshots/restore-light-mobile.png" media="(max-width: 640px)" width="1124" height="636">
           <source srcset="screenshots/restore-dark.png" media="(prefers-color-scheme: dark)" width="2720" height="1720">
-          <img src="screenshots/restore-light.png" alt="The Restore page with its checks." loading="lazy" width="2720" height="1720">
+          <img src="screenshots/restore-light.png" alt="Restoring a SQL Server backup in dbnero: checks before replacing a database." loading="lazy" width="2720" height="1720">
         </picture>
       </a>
     </div>
@@ -301,7 +421,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <source srcset="screenshots/compare-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1340" height="400">
           <source srcset="screenshots/compare-light-mobile.png" media="(max-width: 640px)" width="1340" height="400">
           <source srcset="screenshots/compare-dark.png" media="(prefers-color-scheme: dark)" width="2720" height="1720">
-          <img src="screenshots/compare-light.png" alt="The Compare page showing data differences per table." loading="lazy" width="2720" height="1720">
+          <img src="screenshots/compare-light.png" alt="Comparing a database backup with the live database in dbnero: row differences per table." loading="lazy" width="2720" height="1720">
         </picture>
       </a>
     </div>
@@ -322,6 +442,47 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <tr><td>SQL Server</td><td><code>BACKUP DATABASE … WITH CHECKSUM</code></td><td><code>RESTORE DATABASE … WITH MOVE</code></td><td><code>.bak</code></td><td>2017 and newer</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <p class="eyebrow">Questions</p>
+    <h2>Frequently asked questions</h2>
+    <div class="faq">
+      <details>
+        <summary>Is dbnero free?</summary>
+        <p>Yes. dbnero is free and open source under the MIT license. There is no account, no subscription and no telemetry.</p>
+      </details>
+      <details>
+        <summary>How do I back up a PostgreSQL database on Windows?</summary>
+        <p>Install dbnero, add a connection with the server, port, user name and password, open Back up, tick the databases and click Back up. dbnero runs pg_dump in custom format, writes one file per database and records a SHA-256 checksum. The same steps work for MySQL and SQL Server, and on macOS and Linux.</p>
+      </details>
+      <details>
+        <summary>Do I need to install pg_dump or mysqldump?</summary>
+        <p>No. pg_dump, pg_restore, mysqldump and mysql are included with dbnero. SQL Server uses the ODBC driver built into Windows; on macOS and Linux install Microsoft ODBC Driver 18 if you back up SQL Server.</p>
+      </details>
+      <details>
+        <summary>Can I schedule automatic database backups?</summary>
+        <p>Yes. On the Schedules page choose every day, chosen days or every few hours, and how many backups to keep per database. Scheduled backups also run while dbnero is closed (Windows Task Scheduler, macOS launchd or a systemd timer start it). If the computer was off, the missed backup runs when it is back on and dbnero tells you about it.</p>
+      </details>
+      <details>
+        <summary>How do I restore a SQL Server .bak file or a MySQL dump?</summary>
+        <p>Open Restore, pick the backup, the server and the database to restore into. dbnero checks the file and the server first. Replacing an existing database needs an explicit confirmation, and a safety backup of it is taken first.</p>
+      </details>
+      <details>
+        <summary>Can I compare two databases, or a backup with the live database?</summary>
+        <p>Yes. Compare shows schema differences (tables, columns, keys, indexes, views, routines) and row-level data differences between a backup and a live database, two backups or two live databases. Comparing only reads both sides.</p>
+      </details>
+      <details>
+        <summary>Where are my database passwords stored?</summary>
+        <p>Only if you choose Save password, in your operating system's keychain (Windows Credential Manager, macOS Keychain or the Linux Secret Service). Passwords are never written to the catalog, logs, backup files or command lines.</p>
+      </details>
+      <details>
+        <summary>Which database versions are supported?</summary>
+        <p>PostgreSQL 12 and newer, MySQL 8.0 and newer, and Microsoft SQL Server 2017 and newer.</p>
+      </details>
     </div>
   </div>
 </section>

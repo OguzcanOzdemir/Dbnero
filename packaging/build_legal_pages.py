@@ -19,6 +19,8 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} · dbnero</title>
+<meta name="description" content="{title} of dbnero, the free backup, restore and compare app for PostgreSQL, MySQL and SQL Server.">
+<link rel="canonical" href="https://oguzcanozdemir.github.io/Dbnero/{page}">
 <link rel="icon" type="image/png" href="favicon.png">
 <style>
 :root {{ color-scheme: light dark; --bg: #f6f7f9; --text: #15171c; --muted: #5b6270;
@@ -86,7 +88,7 @@ def to_html(text: str) -> tuple[str, str]:
 def main() -> None:
     for src, dest in (("TERMS.txt", "terms.html"), ("PRIVACY.txt", "privacy.html")):
         title, body = to_html((LEGAL / src).read_text("utf-8"))
-        (SITE / dest).write_text(PAGE.format(title=title, body=body), "utf-8")
+        (SITE / dest).write_text(PAGE.format(title=title, body=body, page=dest), "utf-8")
         print(f"wrote site/{dest}")
 
 

@@ -7,6 +7,7 @@ on:
   push:
     paths:
       - "site/**"
+      - "packaging/build_site_images.py"
       - "docs/screenshots/**"
       - "src/dbnero/__init__.py"
       - ".github/workflows/pages.yml"
@@ -39,6 +40,15 @@ jobs:
           cp docs/screenshots/*.png site/screenshots/
           version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/dbnero/__init__.py)
           sed -i "s|<span id=\"version\">[^<]*</span>|<span id=\"version\">$version</span>|" site/index.html
+          sed -i "s|\"softwareVersion\": \"[^\"]*\"|\"softwareVersion\": \"$version\"|" site/index.html
+          sed -i "s|__LASTMOD__|$(date -u +%Y-%m-%d)|g" site/sitemap.xml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Optimise screenshots
+        run: |
+          pip install --quiet pillow
+          python packaging/build_site_images.py site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

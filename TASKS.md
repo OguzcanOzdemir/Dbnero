@@ -223,6 +223,8 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Kullanım Şartları + Gizlilik Politikası: ilk açılışta bir kez onay, Windows kurulumunda lisans sayfası, sitede sayfalar
 - [x] 0.3.1: parola deposu yarış durumu düzeltildi (Windows'ta kayıtlı parolanın "yok" görünmesi), eksik parola için açık mesaj
 - [x] 0.3.1: açılır listelerde siyah kenar ve iç içe kutu düzeltildi; tüm tablolar ortak `DataTable` ile (satır vurgusu, sığdırma, tooltip), ayrıntı paneli düzenlendi
+- [x] Site SEO: anahtar kelimeli başlık/açıklama, canonical, Open Graph (mutlak görsel), SoftwareApplication + FAQPage yapılandırılmış veri, SSS bölümü, sitemap.xml, WebP ekran görüntüleri
+- [ ] Google Search Console doğrulaması + sitemap gönderimi (kullanıcı), GitHub "About" açıklaması ve konu etiketleri (kullanıcı)
 - [ ] macOS/Linux için SQL Server ODBC sürücüsünü gömmek (sürücü sistem bileşeni; ileride saf-Python TDS sürücüsü değerlendirilebilir)
 - [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
 - [ ] macOS Intel derlemesi
