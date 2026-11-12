@@ -21,6 +21,8 @@ _PATHS: dict[str, str] = {
         '<ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v6c0 1.4 3.1 2.5 7 2.5"/>'
         '<path d="M19 6v4"/><path d="M17 14v6"/><path d="m14.5 17.5 2.5 2.5 2.5-2.5"/>'
     ),
+    # clock
+    "schedule": '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     # stacked boxes
     "archive": (
         '<rect x="3.5" y="4" width="17" height="5" rx="1.2"/><path d="M5 9v10h14V9"/>'

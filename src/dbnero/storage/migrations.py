@@ -107,7 +107,35 @@ _V2 = [
     "ALTER TABLE backups ADD COLUMN extra TEXT NOT NULL DEFAULT '{}'",
 ]
 
-MIGRATIONS: list[list[str]] = [_V1, _V2]
+# v3: scheduled backups.
+_V3 = [
+    """
+    CREATE TABLE schedules (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL,
+        connection_id   TEXT NOT NULL,
+        databases       TEXT NOT NULL DEFAULT '[]',
+        all_databases   INTEGER NOT NULL DEFAULT 0,
+        frequency       TEXT NOT NULL,
+        time_of_day     TEXT NOT NULL,
+        weekdays        TEXT NOT NULL DEFAULT '[]',
+        every_hours     INTEGER NOT NULL DEFAULT 24,
+        keep_last       INTEGER NOT NULL DEFAULT 0,
+        description     TEXT NOT NULL DEFAULT '',
+        tags            TEXT NOT NULL DEFAULT '[]',
+        enabled         INTEGER NOT NULL DEFAULT 1,
+        created_at_utc  TEXT NOT NULL,
+        updated_at_utc  TEXT NOT NULL,
+        last_run_utc    TEXT,
+        last_status     TEXT NOT NULL DEFAULT '',
+        last_message    TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "ALTER TABLE batches ADD COLUMN schedule_id TEXT",
+    "CREATE INDEX ix_batches_schedule ON batches(schedule_id)",
+]
+
+MIGRATIONS: list[list[str]] = [_V1, _V2, _V3]
 
 LATEST_VERSION = len(MIGRATIONS)
 

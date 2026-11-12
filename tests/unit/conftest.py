@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 
@@ -7,6 +8,7 @@ import pytest
 
 from dbnero.core.app import AppContext
 from dbnero.core.models import ConnectionProfile, Engine
+from dbnero.core.os_scheduler import OsScheduler
 from dbnero.core.settings import Settings
 from dbnero.security.credentials import InMemoryCredentialStore
 from dbnero.storage.catalog import Catalog
@@ -17,6 +19,7 @@ from tests.unit.fakes import FakeAdapter, FakeServer, sample_db
 class World:
     app: AppContext
     servers: dict[str, FakeServer]
+    os_calls: list[list[str]]
     pg: ConnectionProfile
     pg2: ConnectionProfile
     my: ConnectionProfile
@@ -34,12 +37,20 @@ def world(tmp_path, monkeypatch) -> Iterator[World]:
     monkeypatch.setattr("dbnero.core.backup_service.create_adapter", fake_create)
     monkeypatch.setattr("dbnero.core.restore_service.find_tool", lambda *a, **k: "/bin/true")
 
+    os_calls: list[list[str]] = []
+
+    def fake_run(args):
+        os_calls.append(list(args))
+        return subprocess.CompletedProcess(list(args), 0, "", "")
+
     settings = Settings(archive_root=str(tmp_path / "archive"), min_free_space_mb=0)
     app = AppContext.create(
         settings,
         catalog=Catalog(tmp_path / "catalog.sqlite3"),
         credentials=InMemoryCredentialStore(),
         settings_path=tmp_path / "settings.json",
+        # Never touch the real Task Scheduler / launchd / systemd in tests.
+        os_scheduler=OsScheduler(platform="darwin", home=tmp_path / "home", run=fake_run),
     )
     pg = ConnectionProfile(name="pg", engine=Engine.POSTGRESQL, host="pg1", port=5432, username="u")
     pg2 = ConnectionProfile(
@@ -51,5 +62,5 @@ def world(tmp_path, monkeypatch) -> Iterator[World]:
     servers["pg1"] = FakeServer(databases={"crm": sample_db(), "erp": sample_db()})
     servers["pg2"] = FakeServer()
     servers["my1"] = FakeServer(databases={"shop": sample_db()})
-    yield World(app, servers, pg, pg2, my)
+    yield World(app, servers, os_calls, pg, pg2, my)
     app.close()

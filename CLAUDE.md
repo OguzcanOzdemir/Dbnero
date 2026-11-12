@@ -137,6 +137,8 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 | Geri yükleme (ön kontrol, onay, koruyucu yedek, doğrulama) | `src/dbnero/core/restore_service.py` |
 | Şema/veri karşılaştırma, izole geçici restore | `src/dbnero/core/compare_service.py` |
 | Arka plan işleri (iptal, ilerleme, kalıcı log) | `src/dbnero/core/jobs.py` |
+| Zamanlanmış yedekler (ne zaman, çalıştırma, saklama, süreçler arası kilit) | `src/dbnero/core/schedule_service.py` |
+| İşletim sistemi zamanlayıcısı (schtasks / launchd / systemd) | `src/dbnero/core/os_scheduler.py` |
 | Genel bakış istatistikleri, arşivden içe aktarma | `src/dbnero/core/catalog_service.py` |
 | Ayarlar (platformdirs, JSON) | `src/dbnero/core/settings.py` |
 | Loglama + parola maskeleme | `src/dbnero/core/logging_setup.py` |
@@ -173,6 +175,15 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 
 `AppContext` varsayılan olarak `default_credential_store()` kullanır: önce OS anahtar kasası; Windows'ta kasa erişimi reddederse (ör. hata 1312) yapılandırma klasöründeki `credentials.dat` dosyasına **DPAPI ile şifrelenmiş** olarak yazar (yalnızca aynı Windows kullanıcısı çözebilir). Hiçbiri yoksa parola **yalnızca bellekte, oturum boyunca** tutulur ve `credential_store_available()` False döner (UI uyarı gösterir). Bağlantı formundaki "Save password" işareti kaldırılırsa parola `set_session_password` ile yalnızca oturumluk tutulur ve kayıtlı kopya silinir. Parolayı **şifresiz** diske yazan bir geri dönüş ekleme.
 
+## Zamanlanmış yedekler
+
+- Zamanlamalar `schedules` tablosunda (migration v3); her çalışmanın `batches.schedule_id` alanı dolu olur. "Keep last N" yalnızca o zamanlamanın yedeklerini siler, elle alınan yedeklere dokunmaz.
+- İki çalıştırıcı var: açık uygulama her dakika (`MainWindow.run_due_schedules`), kapalıyken işletim sistemi görevi `dbnero --run-due` (`main.run_due`, Qt yüklemez). İkisi de `ScheduleService.run_locked` / `scheduler_lock` altında çalışır; bir çalıştırma ayrıca `claim_schedule_run` ile atomik olarak sahiplenilir, aynı zamanlama iki kez çalışmaz.
+- Kilit tutulurken "running" kalan zamanlama, kapanmış/çökmüş bir sürecin artığıdır ve "failed" yapılır. Başlangıçta yarım kalan işleri düzeltme (`AppContext.create(recover=...)`) yalnızca kilit boştayken yapılır; `--run-due` bunu hiç yapmaz.
+- Saatler kullanıcının yerel saatiyle (`HH:MM`) saklanır; kaçırılan çalıştırma bilgisayar açılınca bir kez yapılır.
+- Arka plan kaydı ayarı `Settings.background_schedules`; zamanlama kalmayınca OS görevi kaldırılır. Windows kaldırıcısı da görevi siler (`dbnero.iss` `[UninstallRun]`).
+- Testler gerçek OS zamanlayıcısına asla dokunmaz: `world` fixture'ı sahte `OsScheduler(run=...)` verir.
+
 ## Sürüm yayınlama
 
 1. `src/dbnero/__init__.py` içindeki `__version__` değerini artır (pyproject sürümü buradan okunur).
@@ -181,7 +192,7 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 
 ## Kapsam dışı (MVP)
 
-Motorlar arası taşıma, büyük ölçekli satır bazında veri diff'i, otomatik izole restore ortamı, zamanlanmış yedekleme, bulut depolama, şifreli arşiv, ekip/merkezi yönetim. Bunlar için kod yazmadan önce kullanıcıya sor.
+Motorlar arası taşıma, büyük ölçekli satır bazında veri diff'i, otomatik izole restore ortamı, bulut depolama, şifreli arşiv, ekip/merkezi yönetim. Bunlar için kod yazmadan önce kullanıcıya sor.
 
 ## Çalışma şekli
 

@@ -46,6 +46,8 @@ class Settings:
     # Retention policy (0 = disabled). Applied only after explicit confirmation.
     retention_keep_last: int = 0
     retention_max_age_days: int = 0
+    # Let the OS start dbnero for scheduled backups while the app is closed.
+    background_schedules: bool = True
     # Default backup options per engine, e.g. {"mysql": {"compress": true}}.
     backup_defaults: dict[str, dict[str, Any]] = field(default_factory=dict)
 

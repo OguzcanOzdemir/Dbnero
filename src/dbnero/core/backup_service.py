@@ -215,7 +215,7 @@ class BackupService:
             return record
         except OperationCancelled:
             self._mark(record, BackupStatus.CANCELLED, "Cancelled", paths.schema)
-            emit("WARNING", f"{request.database}: iptal edildi")
+            emit("WARNING", f"{request.database}: cancelled")
             raise
         except Exception as exc:
             message = mask_secrets(str(exc)) or type(exc).__name__
@@ -263,6 +263,7 @@ class BackupService:
         ctx: JobContext | None = None,
         log_fn: LogFn | None = None,
         max_parallel: int | None = None,
+        schedule_id: str | None = None,
     ) -> BatchResult:
         """Back up several databases into separate files and catalog records.
         A failing database never cancels or hides the others."""
@@ -270,7 +271,10 @@ class BackupService:
             raise BackupError("Select at least one database")
         emit = log_fn or _noop_log
         batch = BackupBatch(
-            connection_id=connection_id, database_names=list(databases), description=description
+            connection_id=connection_id,
+            database_names=list(databases),
+            description=description,
+            schedule_id=schedule_id,
         )
         self.catalog.add_batch(batch)
         result = BatchResult(batch)

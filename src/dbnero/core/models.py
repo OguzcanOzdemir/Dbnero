@@ -144,6 +144,44 @@ class BackupBatch:
     description: str = ""
     batch_id: str = field(default_factory=new_id)
     created_at_utc: datetime = field(default_factory=utc_now)
+    schedule_id: str | None = None
+
+
+class ScheduleFrequency(StrEnum):
+    DAILY = "daily"  # at ``time_of_day`` on the chosen ``weekdays``
+    HOURLY = "hourly"  # every ``every_hours`` hours
+
+
+class ScheduleRunStatus(StrEnum):
+    NONE = ""
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    PARTIAL = "partial"  # some databases failed
+    FAILED = "failed"
+
+
+@dataclass(slots=True)
+class Schedule:
+    """A recurring backup of some (or all) databases on one connection."""
+
+    name: str
+    connection_id: str
+    databases: list[str] = field(default_factory=list)
+    all_databases: bool = False
+    frequency: ScheduleFrequency = ScheduleFrequency.DAILY
+    time_of_day: str = "02:00"  # local time, HH:MM
+    weekdays: list[int] = field(default_factory=lambda: list(range(7)))  # 0 = Monday
+    every_hours: int = 6
+    keep_last: int = 7  # backups per database made by this schedule; 0 keeps all
+    description: str = ""
+    tags: list[str] = field(default_factory=list)
+    enabled: bool = True
+    id: str = field(default_factory=new_id)
+    created_at_utc: datetime = field(default_factory=utc_now)
+    updated_at_utc: datetime = field(default_factory=utc_now)
+    last_run_utc: datetime | None = None
+    last_status: ScheduleRunStatus = ScheduleRunStatus.NONE
+    last_message: str = ""
 
 
 @dataclass(slots=True)

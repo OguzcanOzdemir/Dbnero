@@ -174,3 +174,76 @@ def test_tool_report_html():
     html = tool_report_html(reports, keyring_ok=False)
     assert "pg_dump</b> not found" in html and "How to install" in html
     assert "ODBC Driver 18" in html and "Password storage" in html
+
+
+def test_schedules_page_create_run_delete(qtbot, window, world, monkeypatch):
+    from PySide6.QtCore import Qt, QTime
+
+    from dbnero.core.models import ScheduleFrequency, ScheduleRunStatus
+
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+    )
+    page = window.schedules
+    window.show_page("schedules")
+    page.new_schedule()
+    page.name.setText("Nightly")
+    page.connection.setCurrentIndex(page.connection.findData(world.pg.id))
+    qtbot.waitUntil(lambda: page.db_list.count() == 2, timeout=5000)
+    page.db_list.item(0).setCheckState(Qt.CheckState.Checked)  # crm
+    page.repeat.setCurrentIndex(page.repeat.findData("days"))
+    assert not page.days_row.isHidden() and not page.time.isHidden()
+    for i, box in enumerate(page.day_boxes):
+        box.setChecked(i in (0, 2, 4))
+    page.time.setTime(QTime(1, 30))
+    page.keep.setValue(3)
+    page.save_schedule()
+
+    [sched] = world.app.schedules.list_all()
+    assert sched.databases == ["crm"] and sched.weekdays == [0, 2, 4]
+    assert sched.time_of_day == "01:30" and sched.frequency is ScheduleFrequency.DAILY
+    assert sched.keep_last == 3
+    assert "Mon, Wed, Fri at 01:30" in page.list.item(0).text()
+    # Background runs are registered with the OS scheduler (a fake here).
+    qtbot.waitUntil(
+        lambda: any(c[:2] == ["launchctl", "load"] for c in world.os_calls), timeout=5000
+    )
+
+    page.run_now()
+    _wait_jobs(qtbot, world.app)
+    qtbot.waitUntil(lambda: "backed up" in page.status.text(), timeout=5000)
+    got = world.app.schedules.get(sched.id)
+    assert got.last_status is ScheduleRunStatus.SUCCEEDED
+    assert window.archive.table.rowCount() == 1
+    assert "Last run OK" in page.last_run.text()
+
+    # Every few hours hides the time and days.
+    page.repeat.setCurrentIndex(page.repeat.findData("hours"))
+    assert page.time.isHidden() and page.days_row.isHidden() and not page.hours.isHidden()
+
+    page.delete_schedule()
+    assert world.app.schedules.list_all() == []
+    qtbot.waitUntil(
+        lambda: any(c[:2] == ["launchctl", "unload"] for c in world.os_calls), timeout=5000
+    )
+    assert world.app.catalog.list_backups()  # its backups stay
+
+
+def test_open_app_runs_due_schedules(qtbot, window, world):
+    from datetime import UTC, datetime, timedelta
+
+    from dbnero.core.models import Schedule, ScheduleRunStatus
+
+    sched = Schedule(
+        name="hourly",
+        connection_id=world.pg.id,
+        databases=["erp"],
+        created_at_utc=datetime.now(UTC) - timedelta(days=2),
+    )
+    world.app.schedules.save(sched)
+    job = window.run_due_schedules()
+    assert job is not None
+    assert window.run_due_schedules() is None  # one run at a time
+    _wait_jobs(qtbot, world.app)
+    assert world.app.schedules.get(sched.id).last_status is ScheduleRunStatus.SUCCEEDED
+    assert window.run_due_schedules() is None  # nothing due any more

@@ -82,3 +82,12 @@ Yedek akışı (`BackupService.backup_database`):
 |---|---|---|
 | Birim | `tests/unit` | Sahte adaptör (`fakes.py`) ile servisler ve UI (`pytest-qt`); adaptörlerde `run_tool` mock'lanır |
 | Entegrasyon | `tests/integration` | `docker-compose.test.yml` ile gerçek sunucular; CI'da PostgreSQL 14/16 ve MySQL 8.0/8.4 matrisi |
+
+## Zamanlanmış yedekler
+
+`core/schedule_service.py` bir zamanlamanın ne zaman çalışacağını (`next_run`), çalıştırmayı (`run`/`run_due`) ve "son N yedeği tut" saklamasını yönetir. Çalıştırıcılar:
+
+1. Açık uygulama dakikada bir kontrol eder (`MainWindow.run_due_schedules`, iş kuyruğunda).
+2. Uygulama kapalıyken işletim sistemi birkaç dakikada bir `dbnero --run-due` başlatır (`core/os_scheduler.py`: Windows `schtasks`, macOS LaunchAgent, Linux systemd kullanıcı zamanlayıcısı). Bu mod Qt yüklemez, işi bitince çıkar.
+
+Çakışmaları iki katman önler: süreçler arası dosya kilidi (`scheduler_lock`, katalogun yanında) ve katalogda atomik sahiplenme (`claim_schedule_run`). Görev kullanıcının oturumunda çalıştığı için kayıtlı parolalara (anahtar kasası / DPAPI) erişebilir.

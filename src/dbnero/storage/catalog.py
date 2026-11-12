@@ -99,6 +99,30 @@ batches_t = Table(
     Column("description", String, nullable=False),
     Column("database_names", JSONText, nullable=False),
     Column("created_at_utc", UTCDateTime, nullable=False),
+    Column("schedule_id", String),
+)
+
+schedules_t = Table(
+    "schedules",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("connection_id", String, nullable=False),
+    Column("databases", JSONText, nullable=False),
+    Column("all_databases", Integer, nullable=False),
+    Column("frequency", String, nullable=False),
+    Column("time_of_day", String, nullable=False),
+    Column("weekdays", JSONText, nullable=False),
+    Column("every_hours", Integer, nullable=False),
+    Column("keep_last", Integer, nullable=False),
+    Column("description", String, nullable=False),
+    Column("tags", JSONText, nullable=False),
+    Column("enabled", Integer, nullable=False),
+    Column("created_at_utc", UTCDateTime, nullable=False),
+    Column("updated_at_utc", UTCDateTime, nullable=False),
+    Column("last_run_utc", UTCDateTime),
+    Column("last_status", String, nullable=False),
+    Column("last_message", String, nullable=False),
 )
 
 backups_t = Table(
@@ -231,8 +255,9 @@ def _make_engine(path: Path | str) -> Engine:
 
 class Catalog:
     def __init__(self, path: Path | str) -> None:
-        if str(path) != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.path: Path | None = None if str(path) == ":memory:" else Path(path)
+        if self.path is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self._engine = _make_engine(path)
         with self._engine.begin() as conn:
             migrate(conn)
@@ -349,8 +374,90 @@ class Catalog:
                     description=batch.description,
                     database_names=batch.database_names,
                     created_at_utc=batch.created_at_utc,
+                    schedule_id=batch.schedule_id,
                 )
             )
+
+    # -- schedules ----------------------------------------------------------
+
+    def save_schedule(self, sched: m.Schedule) -> None:
+        sched.updated_at_utc = m.utc_now()
+        values = _schedule_to_values(sched)
+        with self._tx() as conn:
+            found = conn.execute(
+                select(schedules_t.c.id).where(schedules_t.c.id == sched.id)
+            ).first()
+            if found is None:
+                conn.execute(insert(schedules_t).values(**values))
+            else:
+                # Run bookkeeping is owned by the runner (claim/record), never the editor.
+                for key in ("created_at_utc", "last_run_utc", "last_status", "last_message"):
+                    values.pop(key)
+                conn.execute(update(schedules_t).where(schedules_t.c.id == sched.id).values(values))
+
+    def get_schedule(self, schedule_id: str) -> m.Schedule:
+        with self._tx() as conn:
+            row = conn.execute(select(schedules_t).where(schedules_t.c.id == schedule_id)).first()
+        if row is None:
+            raise NotFound(f"Schedule {schedule_id} not found")
+        return _row_to_schedule(row)
+
+    def list_schedules(self) -> list[m.Schedule]:
+        with self._tx() as conn:
+            rows = conn.execute(select(schedules_t).order_by(ufold_name(schedules_t))).all()
+        return [_row_to_schedule(r) for r in rows]
+
+    def delete_schedule(self, schedule_id: str) -> None:
+        with self._tx() as conn:
+            conn.execute(delete(schedules_t).where(schedules_t.c.id == schedule_id))
+
+    def claim_schedule_run(
+        self, schedule_id: str, previous: datetime | None, now: datetime
+    ) -> bool:
+        """Atomically mark a run as started. False when another process (or an
+        earlier tick) already claimed it, so a run never happens twice."""
+        c = schedules_t.c
+        prev_cond = c.last_run_utc.is_(None) if previous is None else c.last_run_utc == previous
+        with self._tx() as conn:
+            result = conn.execute(
+                update(schedules_t)
+                .where(c.id == schedule_id, prev_cond)
+                .values(last_run_utc=now, last_status="running", last_message="")
+            )
+        return bool(result.rowcount)
+
+    def mark_interrupted_schedules(self) -> int:
+        """Schedule runs left "running" by a closed or crashed process become failed."""
+        with self._tx() as conn:
+            result = conn.execute(
+                update(schedules_t)
+                .where(schedules_t.c.last_status == m.ScheduleRunStatus.RUNNING.value)
+                .values(
+                    last_status=m.ScheduleRunStatus.FAILED.value,
+                    last_message="Interrupted before it finished",
+                )
+            )
+        return int(result.rowcount or 0)
+
+    def record_schedule_result(self, schedule_id: str, status: str, message: str) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                update(schedules_t)
+                .where(schedules_t.c.id == schedule_id)
+                .values(last_status=status, last_message=message)
+            )
+
+    def schedule_backups(self, schedule_id: str) -> list[m.BackupRecord]:
+        """Backups made by a schedule, newest first."""
+        batch_ids = select(batches_t.c.batch_id).where(batches_t.c.schedule_id == schedule_id)
+        query = (
+            select(backups_t)
+            .where(backups_t.c.batch_id.in_(batch_ids))
+            .order_by(backups_t.c.created_at_utc.desc())
+        )
+        with self._tx() as conn:
+            rows = conn.execute(query).all()
+        return [_row_to_backup(r) for r in rows]
 
     # -- backups ----------------------------------------------------------
 
@@ -497,6 +604,57 @@ class Catalog:
 
 
 # -- row mapping ----------------------------------------------------------
+
+
+def ufold_name(table: Table) -> ColumnElement[Any]:
+    return func.ufold(table.c.name)
+
+
+def _schedule_to_values(s: m.Schedule) -> dict[str, Any]:
+    return {
+        "id": s.id,
+        "name": s.name,
+        "connection_id": s.connection_id,
+        "databases": list(s.databases),
+        "all_databases": int(s.all_databases),
+        "frequency": s.frequency.value,
+        "time_of_day": s.time_of_day,
+        "weekdays": sorted(set(s.weekdays)),
+        "every_hours": s.every_hours,
+        "keep_last": s.keep_last,
+        "description": s.description,
+        "tags": list(s.tags),
+        "enabled": int(s.enabled),
+        "created_at_utc": s.created_at_utc,
+        "updated_at_utc": s.updated_at_utc,
+        "last_run_utc": s.last_run_utc,
+        "last_status": s.last_status.value,
+        "last_message": s.last_message,
+    }
+
+
+def _row_to_schedule(row: Row[Any]) -> m.Schedule:
+    status = row.last_status if row.last_status in m.ScheduleRunStatus._value2member_map_ else ""
+    return m.Schedule(
+        id=row.id,
+        name=row.name,
+        connection_id=row.connection_id,
+        databases=list(row.databases or []),
+        all_databases=bool(row.all_databases),
+        frequency=m.ScheduleFrequency(row.frequency),
+        time_of_day=row.time_of_day,
+        weekdays=list(row.weekdays or []),
+        every_hours=int(row.every_hours),
+        keep_last=int(row.keep_last),
+        description=row.description,
+        tags=list(row.tags or []),
+        enabled=bool(row.enabled),
+        created_at_utc=row.created_at_utc,
+        updated_at_utc=row.updated_at_utc,
+        last_run_utc=row.last_run_utc,
+        last_status=m.ScheduleRunStatus(status),
+        last_message=row.last_message,
+    )
 
 
 def _casefold(value: str | None) -> str | None:

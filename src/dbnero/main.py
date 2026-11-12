@@ -33,10 +33,47 @@ def install_error_dialog(message_box: Any, log_file: Path | None = None) -> None
     sys.excepthook = hook
 
 
+def run_due(settings_file: Path | None = None) -> int:
+    """Headless: run the scheduled backups that are due, then exit. Started by
+    the operating system's scheduler (see ``core.os_scheduler``)."""
+    from dbnero.core.app import AppContext
+    from dbnero.core.models import JobKind
+    from dbnero.core.schedule_service import scheduler_lock
+
+    settings = load_settings(settings_file)
+    # Never mark other processes' running work as interrupted from here.
+    context = AppContext.create(settings, settings_path=settings_file, recover=False)
+    try:
+        with scheduler_lock(context.scheduler_lock_path) as acquired:
+            if not acquired:
+                return 0  # the app (or another runner) is handling schedules now
+            due = context.schedules.due()
+            if not due:
+                return 0
+            title = "Scheduled: " + ", ".join(s.name for s in due)
+            job = context.jobs.submit(
+                JobKind.BACKUP,
+                title,
+                lambda h: context.schedules.run_due(h.ctx, lambda lvl, msg: h.log(msg, lvl)),
+            )
+            context.jobs.wait(job)
+            return 0 if job.error is None else 1
+    finally:
+        context.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
 
     log_file = configure_logging(log_dir())
+    from dbnero.core.os_scheduler import RUN_DUE_FLAG
+
+    if RUN_DUE_FLAG in argv:
+        try:
+            return run_due(settings_path())
+        except Exception:
+            log.exception("Scheduled run failed")
+            return 1
     settings = load_settings()
     log.info("Starting %s %s", APP_NAME, __version__)
 

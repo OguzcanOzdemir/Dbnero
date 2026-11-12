@@ -37,8 +37,9 @@ SQL Server uses an ODBC driver. Windows already includes one. On macOS and Linux
 ## What it does
 
 - **Back up** one database or many. Each database gets its own file and archive entry, and one failure never hides the others.
+- **Schedules:** back up automatically every day, on chosen days or every few hours, and keep only the last N backups per database. They also run while dbnero is closed (Windows Task Scheduler, macOS launchd or a systemd user timer start it briefly); missed runs catch up when the computer is back on.
 - **Never half-written:** backups go to a temporary file, are verified with the engine's tools, then moved into place with a SHA-256 checksum, a schema snapshot and a `manifest.json`.
-- **Restore safely:** a new database by default. Replacing one requires typing its name, takes a safety backup first and compares the restored schema with the backup.
+- **Restore safely:** pick the database to restore into or type a new name. Replacing an existing database needs an explicit confirmation, takes a safety backup first and compares the restored schema with the backup.
 - **Compare** a backup with a live database, two backups or two live databases. Schema differences cover tables, columns, keys, indexes, views, triggers and routines. Data differences are row-level by primary key, using a temporary restore.
 - **Reports** in HTML, JSON or CSV. Sample rows are included only if you agree.
 - **Passwords** are saved in the system keychain (untick "Save password" to keep one only until dbnero closes), never in the catalog, logs or command lines. If Windows refuses keychain access, they are saved encrypted for your Windows user instead.
@@ -102,7 +103,7 @@ Architecture notes: [docs/architecture.md](docs/architecture.md) · Project rule
 ## Not included
 
 - Cross-engine migration (for example SQL Server → MySQL)
-- Scheduled backups and cloud storage
+- Cloud storage
 - Encrypted archives, team or central management
 - PostgreSQL global objects, MySQL physical backups
 

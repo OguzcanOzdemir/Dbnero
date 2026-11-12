@@ -38,3 +38,7 @@ Name: "{autodesktop}\dbnero"; Filename: "{app}\dbnero.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\dbnero.exe"; Description: "Start dbnero"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+; Remove the Task Scheduler entry that runs scheduled backups (if any).
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /F /TN ""dbnero scheduled backups"""; Flags: runhidden; RunOnceId: "RemoveScheduledBackupsTask"
