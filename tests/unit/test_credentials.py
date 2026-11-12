@@ -85,3 +85,33 @@ def test_session_fallback_uses_primary(fake_keyring):
     store.set_password("a", "pw")
     assert fake_keyring.data[("dbnero.connections", "a")] == "pw"
     assert store.is_available() and store.get_password("a") == "pw"
+
+
+def test_windows_credential_error_falls_back_to_session(monkeypatch):
+    """Windows error 1312 (no logon session) must not crash the app."""
+    from dbnero.security.credentials import (
+        CredentialStoreUnavailable,
+        KeyringCredentialStore,
+        SessionFallbackCredentialStore,
+    )
+
+    class WinError(Exception):  # stands in for pywintypes.error
+        pass
+
+    def boom(*_a):
+        raise WinError(1312, "CredRead", "A specified logon session does not exist.")
+
+    monkeypatch.setattr(keyring, "get_password", boom)
+    monkeypatch.setattr(keyring, "set_password", boom)
+    monkeypatch.setattr(keyring, "delete_password", boom)
+
+    with pytest.raises(CredentialStoreUnavailable, match="1312"):
+        KeyringCredentialStore().get_password("x")
+
+    store = SessionFallbackCredentialStore()
+    assert store.get_password("conn") is None
+    assert store.is_available() is False
+    store.set_password("conn", "pw")
+    assert store.get_password("conn") == "pw"
+    store.delete_password("conn")
+    assert store.get_password("conn") is None

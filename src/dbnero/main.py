@@ -4,12 +4,31 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any
 
 from dbnero import APP_NAME, __version__
-from dbnero.core.logging_setup import configure_logging
+from dbnero.core.logging_setup import configure_logging, mask_secrets
 from dbnero.core.settings import load_settings, log_dir, settings_path
 
 log = logging.getLogger(__name__)
+
+
+def install_error_dialog(message_box: Any) -> None:
+    """Show unexpected errors to the user and log them instead of crashing."""
+
+    def hook(exc_type: type[BaseException], exc: BaseException, tb: Any) -> None:
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc, tb)
+            return
+        log.error("Unexpected error", exc_info=(exc_type, exc, tb))
+        text = mask_secrets(str(exc)) or exc_type.__name__
+        message_box.critical(
+            None,
+            APP_NAME,
+            f"Something went wrong: {text}\n\nDetails were written to the log in {log_dir()}.",
+        )
+
+    sys.excepthook = hook
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         mode = ThemeMode.SYSTEM
     apply_theme(app, mode)
+
+    install_error_dialog(QMessageBox)
 
     try:
         context = AppContext.create(settings, settings_path=settings_path())

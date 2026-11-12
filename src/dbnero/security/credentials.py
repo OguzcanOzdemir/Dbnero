@@ -7,7 +7,7 @@ files and logs must never contain passwords.
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 
 import keyring
 import keyring.errors
@@ -49,17 +49,22 @@ class KeyringCredentialStore:
             ("keyring.backends.fail", "keyring.backends.null")
         )
 
+    # Backends raise more than KeyringError: the Windows Credential Manager
+    # raises pywintypes.error (e.g. 1312 "A specified logon session does not
+    # exist" in remote or service sessions), Secret Service raises D-Bus
+    # errors. Any backend failure means "no usable store", never a crash.
+
     def set_password(self, connection_id: str, password: str) -> None:
         try:
             keyring.set_password(self._service, connection_id, password)
-        except keyring.errors.KeyringError as exc:
-            raise CredentialStoreUnavailable(type(exc).__name__) from exc
+        except Exception as exc:
+            raise CredentialStoreUnavailable(_describe(exc)) from exc
 
     def get_password(self, connection_id: str) -> str | None:
         try:
             value: str | None = keyring.get_password(self._service, connection_id)
-        except keyring.errors.KeyringError as exc:
-            raise CredentialStoreUnavailable(type(exc).__name__) from exc
+        except Exception as exc:
+            raise CredentialStoreUnavailable(_describe(exc)) from exc
         return value
 
     def delete_password(self, connection_id: str) -> None:
@@ -67,8 +72,16 @@ class KeyringCredentialStore:
             keyring.delete_password(self._service, connection_id)
         except keyring.errors.PasswordDeleteError:
             log.debug("No stored password for connection %s", connection_id)
-        except keyring.errors.KeyringError as exc:
-            raise CredentialStoreUnavailable(type(exc).__name__) from exc
+        except Exception as exc:
+            raise CredentialStoreUnavailable(_describe(exc)) from exc
+
+
+def _describe(exc: BaseException) -> str:
+    """Short error description that never contains a secret."""
+    args: tuple[Any, ...] = tuple(getattr(exc, "args", ()))
+    if len(args) >= 3 and isinstance(args[0], int):  # pywintypes.error(code, func, text)
+        return f"{args[1]} failed with Windows error {args[0]}: {args[2]}"
+    return type(exc).__name__
 
 
 class InMemoryCredentialStore:
@@ -96,6 +109,7 @@ class SessionFallbackCredentialStore:
         self._primary = primary or KeyringCredentialStore()
         self._session = InMemoryCredentialStore()
         self.persistent = True
+        self._probed = False
 
     def _fallback(self, exc: CredentialStoreUnavailable) -> None:
         if self.persistent:
@@ -103,6 +117,14 @@ class SessionFallbackCredentialStore:
         self.persistent = False
 
     def is_available(self) -> bool:
+        """True when passwords are saved to the OS store. Probes the store once,
+        because a backend can be installed but refuse access (Windows 1312)."""
+        if self.persistent and not self._probed:
+            self._probed = True
+            try:
+                self._primary.get_password("__dbnero_probe__")
+            except CredentialStoreUnavailable as exc:
+                self._fallback(exc)
         return self.persistent
 
     def set_password(self, connection_id: str, password: str) -> None:
