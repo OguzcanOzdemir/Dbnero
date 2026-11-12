@@ -173,8 +173,8 @@ tr:last-child td { border-bottom: none; }
 
 a.shot:focus-visible, a.frame:focus-visible { outline-offset: 4px; }
 @media (max-width: 640px) {
-  .nav-links { gap: 16px; }
-  .nav-links .wide-only { display: none; }
+  nav.top { flex-direction: column; align-items: flex-start; gap: 10px; padding-block: 14px 6px; }
+  .nav-links { gap: 6px 20px; font-size: 0.9rem; }
   .hero { padding-block: 24px 0; }
   .shot { border-radius: 12px; border-bottom: 1px solid var(--ink-line); margin-bottom: 28px; }
   section { padding-block: 52px; }
@@ -191,8 +191,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
     <nav class="top" aria-label="Main">
       <a class="brand" href="#"><img src="favicon.png" alt="" width="30" height="30">dbnero</a>
       <div class="nav-links">
-        <a class="wide-only" href="#features">Features</a>
-        <a class="wide-only" href="#engines">Databases</a>
+        <a href="#features">Features</a>
+        <a href="#engines">Databases</a>
         <a href="#download">Download</a>
         <a href="https://github.com/OguzcanOzdemir/Dbnero">GitHub</a>
       </div>
