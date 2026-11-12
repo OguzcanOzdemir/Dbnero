@@ -207,7 +207,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
         </div>
         <p class="fine">Version <span id="version">0.1.0</span> · MIT license · No account, no telemetry</p>
       </div>
-      <a class="shot" href="screenshots/backups-light.png" aria-label="Open the full-size screenshot">
+      <a class="shot" href="screenshots/backups-light.png" aria-label="Open the screenshot">
         <picture>
           <source srcset="screenshots/backups-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1252" height="792">
           <source srcset="screenshots/backups-light-mobile.png" media="(max-width: 640px)" width="1252" height="792">
@@ -276,7 +276,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <li>Clear warning that a restore is not a transaction</li>
         </ul>
       </div>
-      <a class="frame" href="screenshots/restore-light.png" aria-label="Open the full-size screenshot">
+      <a class="frame" href="screenshots/restore-light.png" aria-label="Open the screenshot">
         <picture>
           <source srcset="screenshots/restore-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1100" height="672">
           <source srcset="screenshots/restore-light-mobile.png" media="(max-width: 640px)" width="1100" height="672">
@@ -296,7 +296,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <li>Sample rows only with your consent</li>
         </ul>
       </div>
-      <a class="frame" href="screenshots/compare-light.png" aria-label="Open the full-size screenshot">
+      <a class="frame" href="screenshots/compare-light.png" aria-label="Open the screenshot">
         <picture>
           <source srcset="screenshots/compare-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1340" height="400">
           <source srcset="screenshots/compare-light-mobile.png" media="(max-width: 640px)" width="1340" height="400">
@@ -382,6 +382,13 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
 </footer>
 
 <script>
+// Open exactly the image that is shown (phone crop or desktop shot, light or dark).
+document.querySelectorAll("a.shot, a.frame").forEach(function (link) {
+  link.addEventListener("click", function () {
+    var img = link.querySelector("img");
+    if (img && img.currentSrc) link.href = img.currentSrc;
+  });
+});
 (function () {
   var ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "";
   ua = ua.toLowerCase();
