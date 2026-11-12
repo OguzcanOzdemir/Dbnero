@@ -91,6 +91,10 @@ def test_backup_archive_restore_compare_flow(qtbot, window, world):
     assert restore.backup.currentData() == rec.backup_id
     restore.target_conn.setCurrentIndex(restore.target_conn.findData(world.pg2.id))
     qtbot.waitUntil(lambda: not restore._loading, timeout=5000)
+    # A refresh (e.g. another job finished) keeps the chosen server.
+    restore.reload()
+    assert restore.target_conn.currentData() == world.pg2.id
+    qtbot.waitUntil(lambda: not restore._loading, timeout=5000)
     # The backup's own database is proposed; pg2 does not have it yet.
     assert restore.target_db.currentText() == rec.database_name
     assert "will be created" in restore.name_hint.text()

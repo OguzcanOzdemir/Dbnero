@@ -217,6 +217,7 @@ Proje dokümanındaki yol haritası (6 aşama), MVP kapsamı ve kabul kriterleri
 - [x] Yedek seçimlerinde açıklama ve etiketler görünüyor; Yedekler tablosunda Tags sütunu
 - [x] Bağlantılarda "Save password" (varsayılan açık); Windows'ta kasa yoksa DPAPI ile şifreli dosya
 - [x] Geri Yükle: tek hedef alanı; ad varsa onay kutusuyla yerine yazılır, yoksa oluşturulur
+- [x] Geri Yükle: başka bir iş bitince seçilen sunucu/veritabanı sıfırlanmıyor (0.1.5)
 - [ ] macOS/Linux için SQL Server ODBC sürücüsünü gömmek (sürücü sistem bileşeni; ileride saf-Python TDS sürücüsü değerlendirilebilir)
 - [ ] Kod imzalama (Windows Authenticode, Apple Developer ID + notarization)
 - [ ] macOS Intel derlemesi

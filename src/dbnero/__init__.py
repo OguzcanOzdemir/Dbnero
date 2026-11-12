@@ -1,4 +1,4 @@
 """dbnero - multi-database backup, restore and compare desktop application."""
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 APP_NAME = "dbnero"

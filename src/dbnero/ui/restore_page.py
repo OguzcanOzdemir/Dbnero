@@ -163,12 +163,19 @@ class RestorePage(Page):
         idx = self.backup.findData(current)
         self.backup.setCurrentIndex(idx if idx >= 0 else 0)
         self.backup.blockSignals(False)
-        self._on_backup_changed()
+        # Keep the user's server and database choice when the same backup is
+        # still selected (the list is refreshed whenever any job finishes).
+        if self.backup.currentData() != current or self.target_conn.count() == 0:
+            self._on_backup_changed()
 
     def select_backup(self, backup_id: str) -> None:
         self._reload()
         idx = self.backup.findData(backup_id)
-        if idx >= 0:
+        if idx < 0:
+            return
+        if idx == self.backup.currentIndex():
+            self._on_backup_changed()  # start from the backup's own server again
+        else:
             self.backup.setCurrentIndex(idx)
 
     def _record(self) -> BackupRecord | None:
