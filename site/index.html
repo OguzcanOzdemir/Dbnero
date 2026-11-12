@@ -67,7 +67,7 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
-img { max-width: 100%; display: block; }
+img { max-width: 100%; height: auto; display: block; }
 a { color: var(--accent); }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
 code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
@@ -115,6 +115,7 @@ nav.top { display: flex; align-items: center; justify-content: space-between; ga
 .btn small { font-weight: 500; opacity: 0.8; }
 .fine { color: var(--ink-text); font-size: 0.85rem; margin-top: 12px; }
 .shot {
+  display: block;
   border-radius: 14px 14px 0 0; border: 1px solid var(--ink-line); border-bottom: none;
   overflow: hidden; box-shadow: 0 -20px 60px rgba(47, 91, 211, 0.18);
 }
@@ -143,7 +144,7 @@ nav.top { display: flex; align-items: center; justify-content: space-between; ga
 }
 .split .copy { display: grid; gap: 12px; }
 .split .copy p { color: var(--muted); }
-.frame { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+.frame { display: block; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
 ul.checks { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 6px; color: var(--muted); }
 ul.checks li::before { content: "✓"; color: var(--ok); font-weight: 700; margin-right: 10px; }
 
@@ -170,6 +171,15 @@ tr:last-child td { border-bottom: none; }
 .after p, .after li { color: var(--muted); font-size: 0.95rem; }
 .after ul { margin: 0; padding-left: 18px; }
 
+a.shot:focus-visible, a.frame:focus-visible { outline-offset: 4px; }
+@media (max-width: 640px) {
+  .nav-links { gap: 16px; }
+  .nav-links .wide-only { display: none; }
+  .hero { padding-block: 24px 0; }
+  .shot { border-radius: 12px; border-bottom: 1px solid var(--ink-line); margin-bottom: 28px; }
+  section { padding-block: 52px; }
+}
+
 footer { padding-block: 36px; color: var(--muted); font-size: 0.9rem; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
 </style>
@@ -181,8 +191,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
     <nav class="top" aria-label="Main">
       <a class="brand" href="#"><img src="favicon.png" alt="" width="30" height="30">dbnero</a>
       <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#engines">Databases</a>
+        <a class="wide-only" href="#features">Features</a>
+        <a class="wide-only" href="#engines">Databases</a>
         <a href="#download">Download</a>
         <a href="https://github.com/OguzcanOzdemir/Dbnero">GitHub</a>
       </div>
@@ -197,10 +207,14 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
         </div>
         <p class="fine">Version <span id="version">0.1.0</span> · MIT license · No account, no telemetry</p>
       </div>
-      <picture class="shot">
-        <source srcset="screenshots/backups-dark.png" media="(prefers-color-scheme: dark)">
-        <img src="screenshots/backups-light.png" alt="The dbnero Backups page listing PostgreSQL, MySQL and SQL Server backups with their status and details." width="1360" height="860">
-      </picture>
+      <a class="shot" href="screenshots/backups-light.png" aria-label="Open the full-size screenshot">
+        <picture>
+          <source srcset="screenshots/backups-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1252" height="792">
+          <source srcset="screenshots/backups-light-mobile.png" media="(max-width: 640px)" width="1252" height="792">
+          <source srcset="screenshots/backups-dark.png" media="(prefers-color-scheme: dark)" width="2720" height="1720">
+          <img src="screenshots/backups-light.png" alt="The dbnero Backups page listing PostgreSQL, MySQL and SQL Server backups with their status and details." width="2720" height="1720">
+        </picture>
+      </a>
     </div>
   </div>
 </div>
@@ -262,10 +276,14 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <li>Clear warning that a restore is not a transaction</li>
         </ul>
       </div>
-      <picture class="frame">
-        <source srcset="screenshots/restore-dark.png" media="(prefers-color-scheme: dark)">
-        <img src="screenshots/restore-light.png" alt="The Restore page with its checks." loading="lazy" width="1360" height="860">
-      </picture>
+      <a class="frame" href="screenshots/restore-light.png" aria-label="Open the full-size screenshot">
+        <picture>
+          <source srcset="screenshots/restore-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1100" height="672">
+          <source srcset="screenshots/restore-light-mobile.png" media="(max-width: 640px)" width="1100" height="672">
+          <source srcset="screenshots/restore-dark.png" media="(prefers-color-scheme: dark)" width="2720" height="1720">
+          <img src="screenshots/restore-light.png" alt="The Restore page with its checks." loading="lazy" width="2720" height="1720">
+        </picture>
+      </a>
     </div>
 
     <div class="split flip">
@@ -278,10 +296,14 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <li>Sample rows only with your consent</li>
         </ul>
       </div>
-      <picture class="frame">
-        <source srcset="screenshots/compare-dark.png" media="(prefers-color-scheme: dark)">
-        <img src="screenshots/compare-light.png" alt="The Compare page showing data differences per table." loading="lazy" width="1360" height="860">
-      </picture>
+      <a class="frame" href="screenshots/compare-light.png" aria-label="Open the full-size screenshot">
+        <picture>
+          <source srcset="screenshots/compare-dark-mobile.png" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="1340" height="400">
+          <source srcset="screenshots/compare-light-mobile.png" media="(max-width: 640px)" width="1340" height="400">
+          <source srcset="screenshots/compare-dark.png" media="(prefers-color-scheme: dark)" width="2720" height="1720">
+          <img src="screenshots/compare-light.png" alt="The Compare page showing data differences per table." loading="lazy" width="2720" height="1720">
+        </picture>
+      </a>
     </div>
   </div>
 </section>

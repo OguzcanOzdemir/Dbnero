@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -110,6 +110,8 @@ class RestorePage(Page):
         checks = Card("Checks")
         self.checks = QListWidget()
         self.checks.setMinimumHeight(150)
+        self.checks.setWordWrap(True)
+        self.checks.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         checks.body.addWidget(self.checks, 1)
         self.confirm_banner = Banner("danger")
         checks.body.addWidget(self.confirm_banner)
