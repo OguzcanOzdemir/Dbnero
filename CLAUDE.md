@@ -176,7 +176,7 @@ Commit öncesi: `ruff check . && ruff format --check . && mypy && pytest` temiz 
 ## Sürüm yayınlama
 
 1. `src/dbnero/__init__.py` içindeki `__version__` değerini artır (pyproject sürümü buradan okunur).
-2. Commit'i gönder, ardından `vX.Y.Z` etiketini gönder. Release iş akışı Windows installer/portable, macOS `.dmg`, Linux AppImage/`.tar.gz` ve `SHA256SUMS.txt` dosyalarını yayınlar.
+2. Varsayılan branch'e gönder. Release iş akışı `vX.Y.Z` etiketi henüz yoksa etiketi ve GitHub Release'i kendisi oluşturur; Windows installer/portable, macOS `.dmg`, Linux AppImage/`.tar.gz` ve `SHA256SUMS.txt` dosyalarını yükler. (Elle `vX.Y.Z` etiketi göndermek de çalışır.)
 3. İndirme bağlantıları sabit dosya adlarıyla `releases/latest/download/<dosya>` adresini kullanır; dosya adlarını değiştirirsen `site/index.html` ve `README.md`'yi de güncelle.
 
 ## Kapsam dışı (MVP)

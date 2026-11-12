@@ -1,27 +1,70 @@
 name: Release
 
-# Push a tag like v0.1.0, or run this workflow manually with a tag name, to
-# build installers for every platform and publish them as a GitHub Release.
+# Builds installers for every platform and publishes them as a GitHub Release.
+#
+# A release is published when either
+#   * the version in src/dbnero/__init__.py changes on the default branch and no
+#     tag v<version> exists yet (the tag is created by this workflow), or
+#   * a tag like v0.1.0 is pushed, or
+#   * the workflow is run manually with a tag name.
 # A manual run without a tag only builds the packages.
 on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+    paths:
+      - "src/dbnero/__init__.py"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag to create, e.g. v0.1.0 (empty = build only)"
         required: false
         default: ""
-  push:
-    tags: ["v*"]
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.decide.outputs.tag }}
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: decide
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/dbnero/__init__.py)
+          tag=""
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${INPUT_TAG}"
+          elif [ "${GITHUB_REF_NAME}" = "${DEFAULT_BRANCH}" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null; then
+              echo "v${version} already released; nothing to do"
+            else
+              tag="v${version}"
+            fi
+          fi
+          build=false
+          if [ -n "$tag" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then build=true; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "version=$version tag=${tag:-none} build=$build"
+
   build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
           - { os: windows-latest, name: windows-x64 }
           - { os: macos-latest, name: macos-arm64 }
-          - { os: macos-13, name: macos-x64 }
           - { os: ubuntu-22.04, name: linux-x86_64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -67,8 +110,8 @@ jobs:
           path: out/*
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -81,9 +124,9 @@ jobs:
         run: cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ needs.plan.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: dbnero ${{ inputs.tag || github.ref_name }}
+          name: dbnero ${{ needs.plan.outputs.tag }}
           files: out/*
           generate_release_notes: true
           body: |
